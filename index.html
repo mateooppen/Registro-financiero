@@ -386,6 +386,7 @@ function showApp() {
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-app').classList.remove('hidden');
   document.getElementById('month-nav').classList.remove('hidden');
+  setType('expense');
   const now = new Date();
   curY = now.getFullYear(); curM = now.getMonth();
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
