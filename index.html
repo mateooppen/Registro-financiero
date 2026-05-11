@@ -224,7 +224,7 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 <script>
 const CLIENT_ID = '926576243590-0ffu3hgsn4qmsdua6bekbb0s7443j2cn.apps.googleusercontent.com';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const REDIRECT_URI = 'https://mateooppen.github.io/Registro-financiero';
+const REDIRECT_URI = 'https://mateooppen.github.io/Registro-financiero/';
 const FILE_NAME = 'finanzas_data.json';
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -238,67 +238,26 @@ let chartInst = null;
 let settingsOpen = false;
 let saveTimer = null;
 
-// ── PKCE helpers ──────────────────────────────────────────────────
-
-function base64url(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function generatePKCE() {
-  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  const challenge = base64url(hash);
-  return { verifier, challenge };
-}
-
 // ── AUTH ──────────────────────────────────────────────────────────
 
-async function buildAuthUrl() {
-  const { verifier, challenge } = await generatePKCE();
-  const state = base64url(crypto.getRandomValues(new Uint8Array(16)));
-  sessionStorage.setItem('pkce_verifier', verifier);
+function buildAuthUrl() {
+  const state = Math.random().toString(36).slice(2);
   sessionStorage.setItem('oauth_state', state);
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    response_type: 'code',
+    response_type: 'token',
     scope: SCOPE,
     state,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    access_type: 'offline',
     prompt: 'select_account'
   });
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 }
 
-async function exchangeCode(code) {
-  const verifier = sessionStorage.getItem('pkce_verifier');
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      grant_type: 'authorization_code',
-      code_verifier: verifier
-    })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'token_exchange_failed');
-  }
-  return res.json();
-}
-
-function saveToken(token, expiresIn, refreshToken) {
+function saveToken(token, expiresIn) {
   accessToken = token;
   tokenExpiry = Date.now() + expiresIn * 1000;
-  const data = { token, expiry: tokenExpiry };
-  if (refreshToken) data.refreshToken = refreshToken;
-  sessionStorage.setItem('fp_token', JSON.stringify(data));
+  sessionStorage.setItem('fp_token', JSON.stringify({ token, expiry: tokenExpiry }));
 }
 
 function loadTokenFromSession() {
@@ -317,7 +276,6 @@ function clearAuth() {
   accessToken = null;
   tokenExpiry = 0;
   sessionStorage.removeItem('fp_token');
-  sessionStorage.removeItem('pkce_verifier');
   sessionStorage.removeItem('oauth_state');
 }
 
@@ -405,7 +363,7 @@ function scheduleSave() {
 // ── PANTALLAS ─────────────────────────────────────────────────────
 
 async function showAuth(errorMsg) {
-  const url = await buildAuthUrl();
+  const url = buildAuthUrl();
   document.getElementById('auth-link').href = url;
   const errEl = document.getElementById('auth-error');
   if (errorMsg) { errEl.textContent = errorMsg; errEl.classList.remove('hidden'); }
@@ -631,13 +589,14 @@ document.getElementById('next-m').addEventListener('click', () => { curM++; if (
 // ── INIT ──────────────────────────────────────────────────────────
 
 async function init() {
-  const params = new URLSearchParams(location.search);
-  const code = params.get('code');
-  const state = params.get('state');
-  const error = params.get('error');
-
-  // Viene de redirect de Google
-  if (code || error) {
+  // 1. ¿Viene de redirect de Google? Token llega en el hash (#access_token=...)
+  const hash = location.hash.slice(1);
+  if (hash) {
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    const expiresIn = parseInt(params.get('expires_in') || '0');
+    const state = params.get('state');
+    const error = params.get('error');
     history.replaceState(null, '', location.pathname);
 
     if (error) {
@@ -647,28 +606,28 @@ async function init() {
       return;
     }
 
-    const savedState = sessionStorage.getItem('oauth_state');
-    if (state !== savedState) {
-      await showAuth('Error de seguridad. Intentá de nuevo.');
+    if (token) {
+      const savedState = sessionStorage.getItem('oauth_state');
+      if (state !== savedState) {
+        await showAuth('Error de seguridad. Intentá de nuevo.');
+        return;
+      }
+      sessionStorage.removeItem('oauth_state');
+      saveToken(token, expiresIn);
+      showLoading('Cargando tus datos...');
+      try {
+        await loadOrCreateFile();
+        showApp();
+      } catch(e) {
+        if (e.message !== 'token_expired' && e.message !== 'unauthorized') {
+          await showAuth('Error al conectar con Drive. Intentá de nuevo.');
+        }
+      }
       return;
     }
-
-    showLoading('Autenticando...');
-    try {
-      const tokens = await exchangeCode(code);
-      saveToken(tokens.access_token, tokens.expires_in, tokens.refresh_token);
-      sessionStorage.removeItem('pkce_verifier');
-      sessionStorage.removeItem('oauth_state');
-      showLoading('Cargando tus datos...');
-      await loadOrCreateFile();
-      showApp();
-    } catch(e) {
-      await showAuth('Error al autenticar. Intentá de nuevo.');
-    }
-    return;
   }
 
-  // Token válido en sesión
+  // 2. Token válido en sesión
   if (loadTokenFromSession()) {
     showLoading('Cargando tus datos...');
     try {
@@ -682,7 +641,7 @@ async function init() {
     return;
   }
 
-  // Sin token — pantalla de login
+  // 3. Sin token — pantalla de login
   await showAuth();
 }
 
