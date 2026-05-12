@@ -78,6 +78,8 @@ html,body{height:100%;background:var(--bg3);font-family:var(--font);color:var(--
 .act-exp{background:var(--red-bg)!important;color:var(--red-text)!important;font-weight:500!important}
 .act-cash{background:var(--green-bg)!important;color:var(--green-text)!important;font-weight:500!important}
 .act-card{background:var(--blue-bg)!important;color:var(--blue-text)!important;font-weight:500!important}
+select{width:100%;height:42px;border:0.5px solid var(--border2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;font-family:var(--font);padding:0 12px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%236b6b67' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .form-fields{display:flex;flex-direction:column;gap:8px;padding:0 16px 14px}
 .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 input[type=text],input[type=number],input[type=date]{width:100%;height:42px;border:0.5px solid var(--border2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;font-family:var(--font);padding:0 12px;outline:none;-webkit-appearance:none;appearance:none}
@@ -161,13 +163,21 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
       <div class="section-label">Nuevo movimiento</div>
       <div style="padding:0 16px 10px;display:flex;flex-direction:column;gap:8px">
         <div class="type-toggle">
-          <button id="btn-exp" class="act-exp" onclick="setType('expense')"><i class="ti ti-arrow-up-circle" style="font-size:14px" aria-hidden="true"></i> Gasto</button>
-          <button id="btn-inc" onclick="setType('income')"><i class="ti ti-arrow-down-circle" style="font-size:14px" aria-hidden="true"></i> Ingreso</button>
+          <button id="btn-inc" class="act-inc" onclick="setType('income')"><i class="ti ti-arrow-down-circle" style="font-size:14px" aria-hidden="true"></i> Ingreso</button>
+          <button id="btn-exp" onclick="setType('expense')"><i class="ti ti-arrow-up-circle" style="font-size:14px" aria-hidden="true"></i> Gasto</button>
         </div>
         <div class="pay-toggle hidden" id="pay-toggle">
           <button id="btn-cash" class="act-cash" onclick="setPayment('cash')"><i class="ti ti-cash" style="font-size:13px" aria-hidden="true"></i> Contado</button>
           <button id="btn-card" onclick="setPayment('card')"><i class="ti ti-credit-card" style="font-size:13px" aria-hidden="true"></i> Tarjeta</button>
         </div>
+        <select id="installments-inp" class="hidden">
+          <option value="1">1 pago</option>
+          <option value="2">2 cuotas</option>
+          <option value="3">3 cuotas</option>
+          <option value="6">6 cuotas</option>
+          <option value="12">12 cuotas</option>
+          <option value="18">18 cuotas</option>
+        </select>
       </div>
       <div class="form-fields">
         <input type="text" id="desc-inp" placeholder="Descripción" autocomplete="off">
@@ -233,7 +243,7 @@ let tokenExpiry = 0;
 let driveFileId = null;
 let appData = { transactions: [], config: { closeDay: 25, cardName: 'Tarjeta' } };
 let curY, curM;
-let curType = 'expense', curPay = 'cash';
+let curType = 'income', curPay = 'cash';
 let chartInst = null;
 let settingsOpen = false;
 let saveTimer = null;
@@ -386,7 +396,6 @@ function showApp() {
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-app').classList.remove('hidden');
   document.getElementById('month-nav').classList.remove('hidden');
-  setType('expense');
   const now = new Date();
   curY = now.getFullYear(); curM = now.getMonth();
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
@@ -410,12 +419,28 @@ function fmtDate(s) { const [, mo, d] = s.split('-'); return d + '/' + mo; }
 
 function computeImpactKey(dateStr, closeDay) {
   const p = dateStr.split('-').map(Number), y = p[0], m = p[1] - 1, d = p[2];
+  let startY, startM;
   if (d <= closeDay) {
-    return mkey(m + 1 > 11 ? y + 1 : y, m + 1 > 11 ? 0 : m + 1);
+    startM = m + 1; startY = y;
+    if (startM > 11) { startM = 0; startY++; }
   } else {
-    const ny1 = m + 1 > 11 ? y + 1 : y, nm1 = m + 1 > 11 ? 0 : m + 1;
-    return mkey(nm1 + 1 > 11 ? ny1 + 1 : ny1, nm1 + 1 > 11 ? 0 : nm1 + 1);
+    startM = m + 2; startY = y;
+    while (startM > 11) { startM -= 12; startY++; }
   }
+  return mkey(startY, startM);
+}
+
+function computeImpactKeys(dateStr, closeDay, installments) {
+  const first = computeImpactKey(dateStr, closeDay);
+  if (installments <= 1) return [first];
+  const [fy, fm] = first.split('-').map(Number);
+  const keys = [];
+  for (let i = 0; i < installments; i++) {
+    let mm = fm - 1 + i, yy = fy;
+    while (mm > 11) { mm -= 12; yy++; }
+    keys.push(mkey(yy, mm));
+  }
+  return keys;
 }
 
 function setType(t) {
@@ -429,6 +454,8 @@ function setPayment(p) {
   curPay = p;
   document.getElementById('btn-cash').className = p === 'cash' ? 'act-cash' : '';
   document.getElementById('btn-card').className = p === 'card' ? 'act-card' : '';
+  document.getElementById('installments-inp').classList.toggle('hidden', p !== 'card');
+  if (p !== 'card') document.getElementById('installments-inp').value = '1';
 }
 
 function toggleSettings() {
@@ -455,10 +482,17 @@ function addTx() {
   if (!desc || isNaN(amount) || amount <= 0 || !date) { toast('Completá descripción, monto y fecha'); return; }
   const payMethod = curType === 'expense' ? curPay : 'income';
   const tx = { id: Date.now(), type: curType, payMethod, desc, amount, date };
-  if (curType === 'expense' && curPay === 'card') tx.impactKey = computeImpactKey(date, appData.config.closeDay);
+  if (curType === 'expense' && curPay === 'card') {
+    const installments = parseInt(document.getElementById('installments-inp').value) || 1;
+    tx.installments = installments;
+    tx.installmentAmount = Math.round(amount / installments);
+    tx.impactKeys = computeImpactKeys(date, appData.config.closeDay, installments);
+    tx.impactKey = tx.impactKeys[0]; // compat
+  }
   appData.transactions.push(tx);
   document.getElementById('desc-inp').value = '';
   document.getElementById('amount-inp').value = '';
+  document.getElementById('installments-inp').value = '1';
   scheduleSave();
   toast('Movimiento agregado');
   render();
@@ -477,8 +511,26 @@ function getStats(y, m) {
   const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
   const cardAcc = mtx.filter(t => t.type === 'expense' && t.payMethod === 'card').reduce((s, t) => s + t.amount, 0);
-  const cardImpact = txs.filter(t => t.payMethod === 'card' && t.impactKey === key).reduce((s, t) => s + t.amount, 0);
-  return { income, cashExp, cardAcc, cardImpact, balance: income - cashExp - cardImpact, monthTx: mtx };
+  // Calcular impacto de tarjeta: sumar cuota correspondiente al mes
+  let cardImpact = 0;
+  let cardImpactNew = 0;   // consumos del mismo mes
+  let cardImpactPrev = 0;  // cuotas de meses anteriores
+  txs.forEach(t => {
+    if (t.payMethod !== 'card') return;
+    const txMonth = t.date ? t.date.slice(0, 7) : '';
+    if (t.impactKeys) {
+      const idx = t.impactKeys.indexOf(key);
+      if (idx !== -1) {
+        const amt = t.installmentAmount || Math.round(t.amount / (t.installments || 1));
+        cardImpact += amt;
+        if (txMonth === key) cardImpactNew += amt; else cardImpactPrev += amt;
+      }
+    } else if (t.impactKey === key) {
+      cardImpact += t.amount;
+      if (txMonth === key) cardImpactNew += t.amount; else cardImpactPrev += t.amount;
+    }
+  });
+  return { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance: income - cashExp - cardImpact, monthTx: mtx };
 }
 
 // ── RENDER ────────────────────────────────────────────────────────
@@ -486,19 +538,29 @@ function getStats(y, m) {
 function render() {
   const cfg = appData.config;
   document.getElementById('month-lbl').textContent = MONTHS[curM] + ' ' + curY;
-  const { income, cashExp, cardAcc, cardImpact, balance, monthTx } = getStats(curY, curM);
+  const { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance, monthTx } = getStats(curY, curM);
+
+  // Métrica de crédito: consumo nuevo + cuotas pendientes
+  let creditLabel = fmt(cardAcc);
+  const creditParts = [];
+  if (cardAcc > 0) creditParts.push('consumido: ' + fmt(cardAcc));
+  if (cardImpactPrev > 0) creditParts.push('cuotas: ' + fmt(cardImpactPrev));
+  const creditSub = creditParts.length > 0 ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + creditParts.join(' + ') + '</div>' : '';
 
   document.getElementById('metrics-grid').innerHTML = `
     <div class="metric"><div class="metric-label"><i class="ti ti-arrow-down-circle" style="color:var(--green)" aria-hidden="true"></i>Ingresos</div><div class="metric-value green">${fmt(income)}</div></div>
     <div class="metric"><div class="metric-label"><i class="ti ti-cash" style="color:var(--red)" aria-hidden="true"></i>Gastos contado</div><div class="metric-value red">${fmt(cashExp)}</div></div>
-    <div class="metric"><div class="metric-label"><i class="ti ti-credit-card" style="color:var(--blue)" aria-hidden="true"></i>Crédito este mes</div><div class="metric-value blue">${fmt(cardAcc)}</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-credit-card" style="color:var(--blue)" aria-hidden="true"></i>Crédito este mes</div><div class="metric-value blue">${fmt(cardAcc + cardImpactPrev)}</div>${creditSub}</div>
     <div class="metric"><div class="metric-label"><i class="ti ti-scale" style="color:var(--text2)" aria-hidden="true"></i>Balance real</div><div class="metric-value ${balance >= 0 ? 'pos' : 'neg'}">${balance < 0 ? '-' : ''}${fmt(balance)}</div></div>
   `;
 
   const banner = document.getElementById('credit-banner');
   if (cardImpact > 0) {
     banner.classList.remove('hidden');
-    document.getElementById('credit-banner-text').innerHTML = `Se cobran <strong>${fmt(cardImpact)}</strong> de ${cfg.cardName} este mes (gastos de meses anteriores).`;
+    const parts = [];
+    if (cardImpactNew > 0) parts.push(fmt(cardImpactNew) + ' de consumo');
+    if (cardImpactPrev > 0) parts.push(fmt(cardImpactPrev) + ' de cuotas anteriores');
+    document.getElementById('credit-banner-text').innerHTML = `Se cobran <strong>${fmt(cardImpact)}</strong> de ${cfg.cardName} este mes (${parts.join(' + ')}).`;
   } else { banner.classList.add('hidden'); }
 
   const sorted = [...monthTx].sort((a, b) => b.date.localeCompare(a.date));
@@ -509,9 +571,21 @@ function render() {
     list.innerHTML = sorted.map(t => {
       const dc = t.type === 'income' ? 'income' : t.payMethod === 'card' ? 'card' : 'cash';
       const prefix = t.type === 'income' ? '+' : '-';
-      const sub = t.payMethod === 'card' && t.impactKey
-        ? `${cfg.cardName} · impacta ${t.impactKey}`
-        : t.type === 'income' ? 'Ingreso' : 'Contado';
+      let sub;
+      if (t.payMethod === 'card') {
+        const inst = t.installments || 1;
+        const keys = t.impactKeys || (t.impactKey ? [t.impactKey] : []);
+        if (inst > 1) {
+          sub = `${cfg.cardName} · ${inst} cuotas de ${fmt(t.installmentAmount)} · ${keys[0]} a ${keys[keys.length-1]}`;
+        } else {
+          sub = `${cfg.cardName} · impacta ${keys[0] || ''}`;
+        }
+      } else {
+        sub = t.type === 'income' ? 'Ingreso' : 'Contado';
+      }
+      const amountDisplay = t.payMethod === 'card' && (t.installments || 1) > 1
+        ? `${fmt(t.amount)}`
+        : `${fmt(t.amount)}`;
       return `<div class="tx-item">
         <span class="tx-dot ${dc}" aria-hidden="true"></span>
         <div class="tx-main">
@@ -519,7 +593,7 @@ function render() {
           <div class="tx-sub">${fmtDate(t.date)} · ${sub}</div>
         </div>
         <div class="tx-right">
-          <span class="tx-amount ${dc}">${prefix}${fmt(t.amount)}</span>
+          <span class="tx-amount ${dc}">${prefix}${amountDisplay}</span>
           <button class="tx-del" onclick="deleteTx(${t.id})" aria-label="Eliminar movimiento"><i class="ti ti-x" aria-hidden="true"></i></button>
         </div>
       </div>`;
