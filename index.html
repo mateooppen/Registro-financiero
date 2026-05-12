@@ -476,6 +476,15 @@ function saveSettings() {
   render();
 }
 
+function resetForm() {
+  document.getElementById('desc-inp').value = '';
+  document.getElementById('amount-inp').value = '';
+  document.getElementById('date-inp').value = new Date().toISOString().split('T')[0];
+  document.getElementById('installments-inp').value = '1';
+  setType('expense');
+  setPayment('cash');
+}
+
 function addTx() {
   const desc = document.getElementById('desc-inp').value.trim();
   const amount = parseFloat(document.getElementById('amount-inp').value);
@@ -491,9 +500,7 @@ function addTx() {
     tx.impactKey = tx.impactKeys[0]; // compat
   }
   appData.transactions.push(tx);
-  document.getElementById('desc-inp').value = '';
-  document.getElementById('amount-inp').value = '';
-  document.getElementById('installments-inp').value = '1';
+  resetForm();
   scheduleSave();
   toast('Movimiento agregado');
   render();
