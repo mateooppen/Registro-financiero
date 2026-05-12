@@ -163,8 +163,8 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
       <div class="section-label">Nuevo movimiento</div>
       <div style="padding:0 16px 10px;display:flex;flex-direction:column;gap:8px">
         <div class="type-toggle">
-          <button id="btn-inc" class="act-inc" onclick="setType('income')"><i class="ti ti-arrow-down-circle" style="font-size:14px" aria-hidden="true"></i> Ingreso</button>
-          <button id="btn-exp" onclick="setType('expense')"><i class="ti ti-arrow-up-circle" style="font-size:14px" aria-hidden="true"></i> Gasto</button>
+          <button id="btn-exp" class="act-exp" onclick="setType('expense')"><i class="ti ti-arrow-up-circle" style="font-size:14px" aria-hidden="true"></i> Gasto</button>
+          <button id="btn-inc" onclick="setType('income')"><i class="ti ti-arrow-down-circle" style="font-size:14px" aria-hidden="true"></i> Ingreso</button>
         </div>
         <div class="pay-toggle hidden" id="pay-toggle">
           <button id="btn-cash" class="act-cash" onclick="setPayment('cash')"><i class="ti ti-cash" style="font-size:13px" aria-hidden="true"></i> Contado</button>
@@ -243,7 +243,7 @@ let tokenExpiry = 0;
 let driveFileId = null;
 let appData = { transactions: [], config: { closeDay: 25, cardName: 'Tarjeta' } };
 let curY, curM;
-let curType = 'income', curPay = 'cash';
+let curType = 'expense', curPay = 'cash';
 let chartInst = null;
 let settingsOpen = false;
 let saveTimer = null;
@@ -396,6 +396,7 @@ function showApp() {
   document.getElementById('screen-loading').classList.add('hidden');
   document.getElementById('screen-app').classList.remove('hidden');
   document.getElementById('month-nav').classList.remove('hidden');
+  setType('expense');
   const now = new Date();
   curY = now.getFullYear(); curM = now.getMonth();
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
