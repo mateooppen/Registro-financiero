@@ -146,41 +146,31 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .inst-badge.last{color:var(--green-text);background:var(--green-bg)}
 .inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
 .hidden{display:none!important}
-  /* Banner de Alquiler */
+ /* Banner de Alquiler - Estilo similar a tu credit-banner */
 .rent-banner {
-  background: #fff9db; /* Color ámbar suave */
-  border-bottom: 1px solid #f59f00;
+  background: var(--amber-bg);
+  border-bottom: 0.5px solid var(--border);
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.9rem;
-  color: #855d00;
+  font-size: 13px;
+  color: var(--amber-text);
   position: sticky;
-  top: 0;
-  z-index: 100;
+  top: 45px; /* Debajo de la topbar */
+  z-index: 9;
 }
-.rent-banner.hidden { display: none; }
-.rent-banner b { color: #f59f00; }
-.close-banner { cursor: pointer; opacity: 0.6; padding: 4px; }
+.rent-banner b { color: var(--text); }
+.close-banner { cursor: pointer; padding: 4px; opacity: 0.7; }
 
-/* Badge de Alquiler en la lista */
-.badge-rent {
-  font-size: 0.7rem;
-  background: var(--bg3);
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 8px;
-  vertical-align: middle;
-  color: var(--text2);
-}
-
-/* Panel de configuración */
-.rent-config-grid {
+/* Configuración de Alquiler - Mismo estilo que configuración de tarjeta */
+.rent-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 8px;
 }
+.rent-grid .full { grid-column: 1 / -1; }
+.rent-grid label { font-size: 11px; color: var(--text2); margin-bottom: 2px; display: block; }
 .full-width { grid-column: 1 / -1; }
 </style>
 </head>
@@ -288,36 +278,39 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
     </div>
 
     <div class="card">
-      <div class="card-header" onclick="toggleSection('rent-config')">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <i class="ti ti-home-dollar"></i>
-          <span>Configuración de Alquiler</span>
-        </div>
-        <i class="ti ti-chevron-down"></i>
-      </div>
-      <div id="rent-config" class="card-content" style="display:none">
-        <div class="rent-config-grid">
-          <div class="input-group full-width">
+      <button class="settings-toggle" onclick="toggleRentSettings()" id="rent-toggle" aria-expanded="false">
+        <span style="display:flex;align-items:center;gap:8px">
+          <i class="ti ti-home-dollar" style="font-size:15px" aria-hidden="true"></i> 
+          Configuración de Alquiler
+        </span>
+        <i class="ti ti-chevron-down" id="rent-chevron" style="font-size:15px;transition:transform .2s" aria-hidden="true"></i>
+      </button>
+      
+      <div class="settings-body hidden" id="rent-body">
+        <div class="rent-grid">
+          <div class="full">
             <label>Monto Inicial ($)</label>
             <input type="number" id="rent-base-amount" placeholder="Ej: 200000">
           </div>
-          <div class="input-group">
+          <div>
             <label>Día de cobro</label>
-            <input type="number" id="rent-day" min="1" max="31" placeholder="10">
+            <input type="number" id="rent-day" min="1" max="31">
           </div>
-          <div class="input-group">
-            <label>Mes inicio contrato</label>
+          <div>
+            <label>Inicio contrato</label>
             <input type="month" id="rent-start-month">
           </div>
-          <div class="input-group">
+          <div>
             <label>Aumento cada (meses)</label>
             <input type="number" id="rent-freq" placeholder="6">
           </div>
-          <div class="input-group">
+          <div>
             <label>% de aumento</label>
             <input type="number" id="rent-percent" placeholder="15">
           </div>
-          <button class="btn btn-primary full-width" onclick="saveRentConfig()">Guardar Configuración</button>
+          <button class="add-btn full" onclick="saveRentConfig()">
+            <i class="ti ti-check" aria-hidden="true"></i> Guardar configuración
+          </button>
         </div>
       </div>
     </div>
@@ -442,21 +435,13 @@ async function loadOrCreateFile() {
     driveFileId = data.files[0].id;
     const fileRes = await driveReq('https://www.googleapis.com/drive/v3/files/' + driveFileId + '?alt=media');
     const json = await fileRes.json();
-    
-    // 1. Cargamos transacciones
     if (json.transactions) appData.transactions = json.transactions;
-    
-    // 2. Cargamos configuración (fusionando lo que haya)
-    if (json.config) {
-      appData.config = { ...appData.config, ...json.config };
-    }
+    if (json.config) appData.config = { ...appData.config, ...json.config };
   } else {
-    // Si no hay archivo, lo creamos
     await createFile();
   }
 
-  // 3. ASEGURAR ESTRUCTURA (Aquí es el mejor lugar)
-  // Esto garantiza que, exista o no el archivo, el objeto rent esté listo para usarse
+  // Red de seguridad: asegurar que la estructura de alquiler exista
   if (!appData.config) appData.config = {};
   if (!appData.config.rent) appData.config.rent = {};
 }
@@ -528,8 +513,18 @@ function showApp() {
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
   document.getElementById('card-name-inp').value = appData.config.cardName;
   document.getElementById('close-day-inp').value = appData.config.closeDay;
-  checkAndGenerateRent();
-  updateRentBanner();
+  // Cargar valores de alquiler en los inputs si existen
+  const rc = appData.config.rent;
+  if (rc && rc.baseAmount) {
+    document.getElementById('rent-base-amount').value = rc.baseAmount;
+    document.getElementById('rent-day').value = rc.day;
+    document.getElementById('rent-start-month').value = rc.startMonth;
+    document.getElementById('rent-freq').value = rc.increaseFreq;
+    document.getElementById('rent-percent').value = rc.percent;
+  }
+
+  checkAndGenerateRent(); // Registrar cobros automáticos
+  updateRentBanner();     // Mostrar aviso si toca aumento
   render();
 }
 
@@ -585,6 +580,14 @@ function setPayment(p) {
   document.getElementById('btn-card').className = p === 'card' ? 'act-card' : '';
   document.getElementById('installments-inp').classList.toggle('hidden', p !== 'card');
   if (p !== 'card') document.getElementById('installments-inp').value = '1';
+}
+
+let rentSettingsOpen = false;
+function toggleRentSettings() {
+  rentSettingsOpen = !rentSettingsOpen;
+  document.getElementById('rent-body').classList.toggle('hidden', !rentSettingsOpen);
+  document.getElementById('rent-chevron').style.transform = rentSettingsOpen ? 'rotate(180deg)' : '';
+  document.getElementById('rent-toggle').setAttribute('aria-expanded', rentSettingsOpen);
 }
 
 function toggleSettings() {
