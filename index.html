@@ -287,28 +287,28 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
       </button>
       
       <div class="settings-body hidden" id="rent-body">
-        <div class="rent-grid">
-          <div class="full">
-            <label>Monto Inicial ($)</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <div style="grid-column: 1 / -1;">
+            <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Monto Inicial ($)</label>
             <input type="number" id="rent-base-amount" placeholder="Ej: 200000">
           </div>
           <div>
-            <label>Día de cobro</label>
+            <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Día de cobro</label>
             <input type="number" id="rent-day" min="1" max="31">
           </div>
           <div>
-            <label>Inicio contrato</label>
-            <input type="month" id="rent-start-month">
+            <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Inicio contrato</label>
+            <input type="date" id="rent-start-date">
           </div>
           <div>
-            <label>Aumento cada (meses)</label>
+            <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Aumento cada (meses)</label>
             <input type="number" id="rent-freq" placeholder="6">
           </div>
           <div>
-            <label>% de aumento</label>
+            <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">% de aumento</label>
             <input type="number" id="rent-percent" placeholder="15">
           </div>
-          <button class="add-btn full" onclick="saveRentConfig()">
+          <button class="add-btn" style="grid-column: 1 / -1;" onclick="saveRentConfig()">
             <i class="ti ti-check" aria-hidden="true"></i> Guardar configuración
           </button>
         </div>
