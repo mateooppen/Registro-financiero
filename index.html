@@ -120,6 +120,26 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .logout-btn:active{background:var(--bg2)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:20px;font-size:13px;font-family:var(--font);z-index:100;opacity:0;transition:opacity 0.2s;white-space:nowrap;pointer-events:none}
 .toast.show{opacity:1}
+.scroll-row{display:flex;gap:6px;overflow-x:auto;padding:0 16px 12px;scrollbar-width:none}
+.scroll-row::-webkit-scrollbar{display:none}
+.mp{background:var(--bg2);border-radius:var(--radius);padding:8px 10px;min-width:72px;flex-shrink:0;text-align:center}
+.mp.free{opacity:0.4}
+.mp-top{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:3px}
+.mp-month{font-size:12px;font-weight:500;color:var(--text)}
+.mp-fin{font-size:9px;color:var(--green-text);background:var(--green-bg);padding:1px 5px;border-radius:8px;font-weight:500;white-space:nowrap}
+.mp-amount{font-size:13px;font-weight:500;color:var(--blue)}
+.mp-amount.zero{color:var(--text3);font-size:11px;font-weight:400}
+.inst-toggle{width:100%;background:none;border:none;border-top:0.5px solid var(--border);padding:10px 16px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:var(--font)}
+.inst-toggle:active{background:var(--bg2)}
+.inst-detail{padding:0 16px 12px;border-top:0.5px solid var(--border);background:var(--bg2)}
+.inst-mh{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:4px}
+.inst-mh-name{font-size:13px;font-weight:500;color:var(--text)}
+.inst-mh-total{font-size:14px;font-weight:500;color:var(--blue)}
+.inst-row{display:flex;align-items:center;padding:5px 0;gap:8px}
+.inst-desc{flex:1;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inst-badge{font-size:11px;color:var(--blue-text);background:var(--blue-bg);padding:1px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.inst-badge.last{color:var(--green-text);background:var(--green-bg)}
+.inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
 .hidden{display:none!important}
 </style>
 </head>
@@ -187,6 +207,13 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
         </div>
         <button class="add-btn" onclick="addTx()"><i class="ti ti-plus" style="font-size:16px" aria-hidden="true"></i> Agregar</button>
       </div>
+    </div>
+
+    <div class="card hidden" id="installments-card">
+      <div class="section-label">Cuotas pendientes</div>
+      <div class="scroll-row" id="inst-summary"></div>
+      <button class="inst-toggle" id="inst-toggle-btn" onclick="toggleInstDetail()"><i class="ti ti-chevron-down" style="font-size:14px" aria-hidden="true"></i> Ver detalle de cuotas</button>
+      <div class="inst-detail hidden" id="inst-detail"></div>
     </div>
 
     <div class="card">
@@ -605,9 +632,87 @@ function render() {
       </div>`;
     }).join('');
   }
+  renderInstallments();
   // NO ELIMINAR: renderChart genera el gráfico de 6 meses, deshabilitado temporalmente.
   // renderChart();
   renderHist(cfg);
+}
+
+function toggleInstDetail() {
+  const d = document.getElementById('inst-detail');
+  const b = document.getElementById('inst-toggle-btn');
+  const open = d.classList.toggle('hidden');
+  b.innerHTML = !open
+    ? '<i class="ti ti-chevron-up" style="font-size:14px" aria-hidden="true"></i> Ocultar detalle'
+    : '<i class="ti ti-chevron-down" style="font-size:14px" aria-hidden="true"></i> Ver detalle de cuotas';
+}
+
+function renderInstallments() {
+  const txs = appData.transactions.filter(t => t.payMethod === 'card' && (t.installments || 1) > 1);
+  const cfg = appData.config;
+  if (!txs.length) { document.getElementById('installments-card').classList.add('hidden'); return; }
+  document.getElementById('installments-card').classList.remove('hidden');
+
+  // Collect all future months that have installment impacts
+  const now = new Date();
+  const currentKey = mkey(now.getFullYear(), now.getMonth());
+  const monthMap = {};
+
+  txs.forEach(t => {
+    const keys = t.impactKeys || [];
+    const inst = t.installments || 1;
+    const amt = t.installmentAmount || Math.round(t.amount / inst);
+    keys.forEach((k, idx) => {
+      if (k < currentKey) return;
+      if (!monthMap[k]) monthMap[k] = { total: 0, items: [], finishes: 0 };
+      monthMap[k].total += amt;
+      monthMap[k].items.push({ desc: t.desc, cuota: idx + 1, of: inst, amount: amt, isLast: idx + 1 === inst });
+      if (idx + 1 === inst) monthMap[k].finishes++;
+    });
+  });
+
+  const sortedKeys = Object.keys(monthMap).sort();
+  if (!sortedKeys.length) { document.getElementById('installments-card').classList.add('hidden'); return; }
+
+  // Find last month with installments, then add one "libre" month
+  const lastKey = sortedKeys[sortedKeys.length - 1];
+  const [ly, lm] = lastKey.split('-').map(Number);
+  let freeM = lm, freeY = ly;
+  freeM++;
+  if (freeM > 12) { freeM = 1; freeY++; }
+  const freeKey = mkey(freeY, freeM - 1);
+
+  // Render summary pills
+  const fmtK = v => {
+    if (v >= 1000000) return '$' + Math.round(v / 1000000) + 'M';
+    if (v >= 1000) return '$' + Math.round(v / 1000) + 'k';
+    return '$' + v;
+  };
+  let pills = sortedKeys.map(k => {
+    const d = monthMap[k];
+    const [y, m] = k.split('-').map(Number);
+    const mName = MONTHS[m - 1].slice(0, 3);
+    const finBadge = d.finishes > 0
+      ? `<span class="mp-fin"><i class="ti ti-check" style="font-size:10px" aria-hidden="true"></i>${d.finishes}</span>`
+      : '';
+    return `<div class="mp"><div class="mp-top"><span class="mp-month">${mName}</span>${finBadge}</div><div class="mp-amount">${fmtK(d.total)}</div></div>`;
+  }).join('');
+  pills += `<div class="mp free"><div class="mp-top"><span class="mp-month">${MONTHS[freeM - 1].slice(0, 3)}</span></div><div class="mp-amount zero">libre</div></div>`;
+  document.getElementById('inst-summary').innerHTML = pills;
+
+  // Render detail panel
+  let detail = sortedKeys.map(k => {
+    const d = monthMap[k];
+    const [y, m] = k.split('-').map(Number);
+    let html = `<div class="inst-mh"><span class="inst-mh-name">${MONTHS[m - 1]} ${y}</span><span class="inst-mh-total">${fmt(d.total)}</span></div>`;
+    d.items.forEach(item => {
+      const badgeCls = item.isLast ? 'inst-badge last' : 'inst-badge';
+      const badgeText = item.isLast ? `${item.cuota}/${item.of} última` : `${item.cuota}/${item.of}`;
+      html += `<div class="inst-row"><span class="inst-desc">${item.desc}</span><span class="${badgeCls}">${badgeText}</span><span class="inst-amt">${fmt(item.amount)}</span></div>`;
+    });
+    return html;
+  }).join('');
+  document.getElementById('inst-detail').innerHTML = detail;
 }
 
 function renderChart() {
