@@ -146,6 +146,42 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .inst-badge.last{color:var(--green-text);background:var(--green-bg)}
 .inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
 .hidden{display:none!important}
+  /* Banner de Alquiler */
+.rent-banner {
+  background: #fff9db; /* Color ámbar suave */
+  border-bottom: 1px solid #f59f00;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: #855d00;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.rent-banner.hidden { display: none; }
+.rent-banner b { color: #f59f00; }
+.close-banner { cursor: pointer; opacity: 0.6; padding: 4px; }
+
+/* Badge de Alquiler en la lista */
+.badge-rent {
+  font-size: 0.7rem;
+  background: var(--bg3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+  color: var(--text2);
+}
+
+/* Panel de configuración */
+.rent-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.full-width { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -161,6 +197,11 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
       <span class="month-label" id="month-lbl"></span>
       <button class="nav-btn" id="next-m" aria-label="Mes siguiente"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
     </div>
+  </div>
+
+  <div id="rent-banner" class="rent-banner hidden">
+    <div id="rent-banner-text"></div>
+    <div class="close-banner" onclick="dismissRentBanner()"><i class="ti ti-x"></i></div>
   </div>
 
   <div id="screen-auth" class="auth-screen">
@@ -244,6 +285,41 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
     <div class="card">
       <div class="section-label">Historial</div>
       <div class="hist-row" id="hist-row"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" onclick="toggleSection('rent-config')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <i class="ti ti-home-dollar"></i>
+          <span>Configuración de Alquiler</span>
+        </div>
+        <i class="ti ti-chevron-down"></i>
+      </div>
+      <div id="rent-config" class="card-content" style="display:none">
+        <div class="rent-config-grid">
+          <div class="input-group full-width">
+            <label>Monto Inicial ($)</label>
+            <input type="number" id="rent-base-amount" placeholder="Ej: 200000">
+          </div>
+          <div class="input-group">
+            <label>Día de cobro</label>
+            <input type="number" id="rent-day" min="1" max="31" placeholder="10">
+          </div>
+          <div class="input-group">
+            <label>Mes inicio contrato</label>
+            <input type="month" id="rent-start-month">
+          </div>
+          <div class="input-group">
+            <label>Aumento cada (meses)</label>
+            <input type="number" id="rent-freq" placeholder="6">
+          </div>
+          <div class="input-group">
+            <label>% de aumento</label>
+            <input type="number" id="rent-percent" placeholder="15">
+          </div>
+          <button class="btn btn-primary full-width" onclick="saveRentConfig()">Guardar Configuración</button>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -361,15 +437,28 @@ async function loadOrCreateFile() {
     'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22' + FILE_NAME + '%22&fields=files(id)'
   );
   const data = await res.json();
+
   if (data.files && data.files.length > 0) {
     driveFileId = data.files[0].id;
     const fileRes = await driveReq('https://www.googleapis.com/drive/v3/files/' + driveFileId + '?alt=media');
     const json = await fileRes.json();
+    
+    // 1. Cargamos transacciones
     if (json.transactions) appData.transactions = json.transactions;
-    if (json.config) appData.config = { ...appData.config, ...json.config };
+    
+    // 2. Cargamos configuración (fusionando lo que haya)
+    if (json.config) {
+      appData.config = { ...appData.config, ...json.config };
+    }
   } else {
+    // Si no hay archivo, lo creamos
     await createFile();
   }
+
+  // 3. ASEGURAR ESTRUCTURA (Aquí es el mejor lugar)
+  // Esto garantiza que, exista o no el archivo, el objeto rent esté listo para usarse
+  if (!appData.config) appData.config = {};
+  if (!appData.config.rent) appData.config.rent = {};
 }
 
 async function createFile() {
@@ -439,6 +528,8 @@ function showApp() {
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
   document.getElementById('card-name-inp').value = appData.config.cardName;
   document.getElementById('close-day-inp').value = appData.config.closeDay;
+  checkAndGenerateRent();
+  updateRentBanner();
   render();
 }
 
@@ -777,6 +868,129 @@ function toast(msg) {
 
 document.getElementById('prev-m').addEventListener('click', () => { curM--; if (curM < 0) { curM = 11; curY--; } render(); });
 document.getElementById('next-m').addEventListener('click', () => { curM++; if (curM > 11) { curM = 0; curY++; } render(); });
+
+  // 1. Calcular monto para un mes específico
+function getRentAmountForDate(targetDate, config) {
+    const start = new Date(config.startMonth + "-01T00:00:00");
+    const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+    
+    // Diferencia en meses
+    let monthsDiff = (target.getFullYear() - start.getFullYear()) * 12 + (target.getMonth() - start.getMonth());
+    if (monthsDiff < 0) return null;
+
+    // Cuántas veces se aplicó el aumento
+    const periods = Math.floor(monthsDiff / config.increaseFreq);
+    const finalAmount = config.baseAmount * Math.pow(1 + (config.percent / 100), periods);
+    
+    return Math.round(finalAmount);
+}
+
+// 2. Registro automático de meses faltantes
+async function checkAndGenerateRent() {
+    const conf = appData.config.rent;
+    if (!conf || !conf.baseAmount) return;
+
+    const today = new Date();
+    const start = new Date(conf.startMonth + "-01T00:00:00");
+    let current = new Date(start);
+    let updated = false;
+
+    // Recorrer desde el inicio hasta hoy
+    while (current <= today) {
+        const monthKey = current.toISOString().slice(0, 7); // YYYY-MM
+        const dayToPay = Math.min(conf.day, new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate());
+        const paymentDate = `${monthKey}-${String(dayToPay).padStart(2, '0')}`;
+        
+        // Si ya pasó el día de cobro de este mes...
+        if (new Date(paymentDate + "T00:00:00") <= today) {
+            // Verificar si ya existe la transacción
+            const exists = appData.transactions.find(t => t.source === 'rent' && t.date.startsWith(monthKey));
+            
+            if (!exists) {
+                const amount = getRentAmountForDate(current, conf);
+                const newTx = {
+                    id: Date.now() + Math.random(),
+                    type: 'income',
+                    payMethod: 'cash',
+                    desc: 'Alquiler (Automático)',
+                    amount: amount,
+                    date: paymentDate,
+                    source: 'rent'
+                };
+                appData.transactions.push(newTx);
+                updated = true;
+            }
+        }
+        current.setMonth(current.getMonth() + 1);
+    }
+
+    if (updated) {
+        appData.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        await scheduleSave();
+        renderAll();
+    }
+}
+
+function saveRentConfig() {
+  appData.config.rent = {
+      baseAmount: parseFloat(document.getElementById('rent-base-amount').value),
+      day: parseInt(document.getElementById('rent-day').value),
+      startMonth: document.getElementById('rent-start-month').value,
+      increaseFreq: parseInt(document.getElementById('rent-freq').value),
+      percent: parseFloat(document.getElementById('rent-percent').value),
+      lastDismissed: appData.config.rent.lastDismissed || null
+  };
+  scheduleSave();
+  alert("Configuración de alquiler guardada. Se registrarán los cobros pendientes.");
+  checkAndGenerateRent();
+  updateRentBanner();
+}
+
+function updateRentBanner() {
+    const conf = appData.config.rent;
+    const banner = document.getElementById('rent-banner');
+    if (!conf || !conf.baseAmount) return banner.classList.add('hidden');
+
+    const today = new Date();
+    const start = new Date(conf.startMonth + "-01T00:00:00");
+    
+    // Encontrar el próximo aumento
+    let nextIncreaseDate = new Date(start);
+    while (nextIncreaseDate <= today) {
+        nextIncreaseDate.setMonth(nextIncreaseDate.getMonth() + parseInt(conf.increaseFreq));
+    }
+
+    // Calcular días faltantes
+    const diffDays = Math.ceil((nextIncreaseDate - today) / (1000 * 60 * 60 * 24));
+
+    // Si faltan 10 días o menos
+    if (diffDays <= 10 && diffDays > 0) {
+        const nextMonthKey = nextIncreaseDate.toISOString().slice(0, 7);
+        // Si el usuario ya cerró el banner para este aumento específico, no mostrar
+        if (conf.lastDismissed === nextMonthKey) return banner.classList.add('hidden');
+
+        const currentAmount = getRentAmountForDate(today, conf);
+        const nextAmount = getRentAmountForDate(nextIncreaseDate, conf);
+        
+        document.getElementById('rent-banner-text').innerHTML = 
+            `<b>Aumento en ${diffDays} días:</b> El alquiler pasará de $${currentAmount.toLocaleString()} a $${nextAmount.toLocaleString()} (+${conf.percent}%)`;
+        banner.classList.remove('hidden');
+    } else {
+        banner.classList.add('hidden');
+    }
+}
+
+function dismissRentBanner() {
+    const conf = appData.config.rent;
+    const today = new Date();
+    let nextIncreaseDate = new Date(conf.startMonth + "-01T00:00:00");
+    while (nextIncreaseDate <= today) {
+        nextIncreaseDate.setMonth(nextIncreaseDate.getMonth() + parseInt(conf.increaseFreq));
+    }
+    conf.lastDismissed = nextIncreaseDate.toISOString().slice(0, 7);
+    document.getElementById('rent-banner').classList.add('hidden');
+    scheduleSave();
+}
 
 // ── INIT ──────────────────────────────────────────────────────────
 
