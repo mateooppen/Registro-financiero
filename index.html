@@ -33,6 +33,9 @@
     --red:#e87654; --red-bg:#3a1a10; --red-text:#F0997B;
     --blue:#5fa8e0; --blue-bg:#0d2640; --blue-text:#85B7EB;
     --amber-bg:#2e1f05; --amber-text:#EF9F27;
+    --green-bg:#1a5c42; --green-text:#5DCAA5;
+    --red-bg:#5a2515; --red-text:#F0997B;
+    --blue-bg:#0d3a6a; --blue-text:#85B7EB;
   }
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -74,12 +77,12 @@ html,body{height:100%;background:var(--bg3);font-family:var(--font);color:var(--
 .section-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;padding:14px 16px 10px}
 .type-toggle,.pay-toggle{display:flex;border:0.5px solid var(--border2);border-radius:8px;overflow:hidden}
 .type-toggle button,.pay-toggle button{flex:1;padding:0 10px;height:38px;border:none;cursor:pointer;font-size:13px;font-family:var(--font);background:transparent;color:var(--text2);white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:5px}
+.type-toggle button:not([class*="act-"]),.pay-toggle button:not([class*="act-"]){background:var(--bg2);color:var(--text);border-left:0.5px solid var(--border)}
+.type-toggle button:first-child:not([class*="act-"]),.pay-toggle button:first-child:not([class*="act-"]){border-left:none}
 .act-inc{background:var(--green-bg)!important;color:var(--green-text)!important;font-weight:500!important}
 .act-exp{background:var(--red-bg)!important;color:var(--red-text)!important;font-weight:500!important}
 .act-cash{background:var(--green-bg)!important;color:var(--green-text)!important;font-weight:500!important}
 .act-card{background:var(--blue-bg)!important;color:var(--blue-text)!important;font-weight:500!important}
-.type-toggle button:not([class*="act-"]),.pay-toggle button:not([class*="act-"]){background:var(--bg2);color:var(--text);border-left:0.5px solid var(--border)}
-.type-toggle button:first-child:not([class*="act-"]),.pay-toggle button:first-child:not([class*="act-"]){border-left:none}
 select{width:100%;height:42px;border:0.5px solid var(--border2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;font-family:var(--font);padding:0 12px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%236b6b67' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
 select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .form-fields{display:flex;flex-direction:column;gap:8px;padding:0 16px 14px}
