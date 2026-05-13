@@ -194,15 +194,20 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
       <div class="tx-list" id="tx-list"></div>
     </div>
 
-    <div class="card">
-      <div class="section-label">Evolución 6 meses</div>
-      <div class="legend-row">
-        <span class="legend-item"><span class="legend-dot" style="background:#5DCAA5"></span>Ingresos</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#F0997B"></span>Contado</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#85B7EB"></span>Crédito cobrado</span>
+    <!--
+      NO ELIMINAR: gráfico de evolución de 6 meses, oculto temporalmente porque no aporta valor actualmente,
+      pero puede volver a ser útil más adelante. Mantener el código intacto.
+    
+      <div class="card">
+        <div class="section-label">Evolución 6 meses</div>
+        <div class="legend-row">
+          <span class="legend-item"><span class="legend-dot" style="background:#5DCAA5"></span>Ingresos</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#F0997B"></span>Contado</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#85B7EB"></span>Crédito cobrado</span>
+        </div>
+        <div class="chart-wrap"><canvas id="hist-chart" role="img" aria-label="Evolución mensual de ingresos y gastos">Gráfico de barras mensual.</canvas></div>
       </div>
-      <div class="chart-wrap"><canvas id="hist-chart" role="img" aria-label="Evolución mensual de ingresos y gastos">Gráfico de barras mensual.</canvas></div>
-    </div>
+    -->
 
     <div class="card">
       <div class="section-label">Historial</div>
@@ -562,14 +567,7 @@ function render() {
     <div class="metric"><div class="metric-label"><i class="ti ti-scale" style="color:var(--text2)" aria-hidden="true"></i>Balance real</div><div class="metric-value ${balance >= 0 ? 'pos' : 'neg'}">${balance < 0 ? '-' : ''}${fmt(balance)}</div></div>
   `;
 
-  const banner = document.getElementById('credit-banner');
-  if (cardImpact > 0) {
-    banner.classList.remove('hidden');
-    const parts = [];
-    if (cardImpactNew > 0) parts.push(fmt(cardImpactNew) + ' de consumo');
-    if (cardImpactPrev > 0) parts.push(fmt(cardImpactPrev) + ' de cuotas anteriores');
-    document.getElementById('credit-banner-text').innerHTML = `Se cobran <strong>${fmt(cardImpact)}</strong> de ${cfg.cardName} este mes (${parts.join(' + ')}).`;
-  } else { banner.classList.add('hidden'); }
+  document.getElementById('credit-banner').classList.add('hidden');
 
   const sorted = [...monthTx].sort((a, b) => b.date.localeCompare(a.date));
   const list = document.getElementById('tx-list');
@@ -607,7 +605,8 @@ function render() {
       </div>`;
     }).join('');
   }
-  renderChart();
+  // NO ELIMINAR: renderChart genera el gráfico de 6 meses, deshabilitado temporalmente.
+  // renderChart();
   renderHist(cfg);
 }
 
