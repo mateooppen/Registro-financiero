@@ -8,13 +8,12 @@
     <meta name="theme-color" content="#ffffff">
     <title>Finanzas personales</title>
     
-    <!-- Librerías Externas -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     
-    <!-- Archivo de Estilos -->
+    <!-- Archivo de Estilos (Ahora CSS puro) -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -31,7 +30,6 @@
             </div>
         </div>
 
-        <!-- Pantalla de Autenticación -->
         <div id="screen-auth" class="auth-screen">
             <div class="auth-icon"><i class="ti ti-lock"></i></div>
             <div class="auth-title">Finanzas personales</div>
@@ -43,19 +41,16 @@
             <div class="auth-error hidden" id="auth-error"></div>
         </div>
 
-        <!-- Pantalla de Carga -->
         <div id="screen-loading" class="loading-screen hidden">
             <div class="spinner"></div>
             <div class="loading-text" id="loading-text">Conectando...</div>
         </div>
 
-        <!-- Pantalla Principal de la App -->
         <div id="screen-app" class="content hidden">
             <div class="metrics" id="metrics-grid"></div>
             <div class="credit-banner hidden" id="credit-banner"><i class="ti ti-credit-card"></i><span id="credit-banner-text"></span></div>
             <div class="save-bar hidden" id="save-bar"><i class="ti ti-cloud-upload"></i><span id="save-bar-text"></span></div>
 
-            <!-- Formulario Nuevo Movimiento -->
             <div class="card">
                 <div class="section-label">Nuevo movimiento</div>
                 <div class="form-container">
@@ -86,27 +81,11 @@
                 </div>
             </div>
 
-            <!-- Cuotas Pendientes -->
-            <div class="card hidden" id="installments-card">
-                <div class="section-label">Cuotas pendientes</div>
-                <div class="scroll-row" id="inst-summary"></div>
-                <button class="inst-toggle" id="inst-toggle-btn" onclick="toggleInstDetail()"><i class="ti ti-chevron-down"></i> Ver detalle de cuotas</button>
-                <div class="inst-detail hidden" id="inst-detail"></div>
-            </div>
-
-            <!-- Lista de Movimientos -->
             <div class="card">
                 <div class="section-label">Movimientos del mes</div>
                 <div class="tx-list" id="tx-list"></div>
             </div>
 
-            <!-- Historial -->
-            <div class="card">
-                <div class="section-label">Historial</div>
-                <div class="hist-row" id="hist-row"></div>
-            </div>
-
-            <!-- Configuración Alquiler (Componente Corregido) -->
             <div class="card">
                 <button class="settings-toggle" onclick="toggleRentSettings()" id="rent-toggle" aria-expanded="false">
                     <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-home-dollar"></i> Configuración de Alquiler</span>
@@ -139,7 +118,6 @@
                 </div>
             </div>
 
-            <!-- Configuración Tarjeta y Sesión -->
             <div class="card">
                 <button class="settings-toggle" onclick="toggleSettings()" id="settings-toggle" aria-expanded="false">
                     <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-settings"></i> Configuración de tarjeta</span>
@@ -162,7 +140,6 @@
     </div>
     <div class="toast" id="toast"></div>
 
-    <!-- Archivo de Lógica -->
     <script src="script.js"></script>
 </body>
 </html>
