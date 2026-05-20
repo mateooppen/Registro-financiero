@@ -53,6 +53,7 @@
 
   <div id="screen-app" class="content hidden">
     <div class="metrics" id="metrics-grid"></div>
+    <div class="card hidden" id="credit-card-detail"></div>
     <div class="credit-banner hidden" id="credit-banner"><i class="ti ti-credit-card" aria-hidden="true"></i><span id="credit-banner-text"></span></div>
     <div class="save-bar hidden" id="save-bar"><i class="ti ti-cloud-upload" aria-hidden="true"></i><span id="save-bar-text"></span></div>
 
@@ -75,6 +76,7 @@
           <option value="12">12 cuotas</option>
           <option value="18">18 cuotas</option>
         </select>
+        <select id="account-select" class="hidden" onchange="setAccount(this.value)"></select>
       </div>
       <div class="form-fields">
         <input type="text" id="desc-inp" placeholder="Descripción" autocomplete="off">
@@ -116,6 +118,25 @@
     <div class="card">
       <div class="section-label">Historial</div>
       <div class="hist-row" id="hist-row"></div>
+    </div>
+
+    <div class="card">
+      <button class="settings-toggle" onclick="toggleSettings()" id="settings-toggle" aria-expanded="false">
+        <span class="settings-toggle-label"><i class="ti ti-settings icon-lg" aria-hidden="true"></i> Configuración de tarjeta</span>
+        <i class="ti ti-chevron-down chevron" id="settings-chevron" aria-hidden="true"></i>
+      </button>
+      <div class="settings-body hidden" id="settings-body">
+        <div>
+          <label for="card-name-inp">Nombre de la tarjeta</label>
+          <input type="text" id="card-name-inp" placeholder="Visa, Mastercard, Naranja...">
+        </div>
+        <div>
+          <label for="close-day-inp">Día de cierre</label>
+          <input type="number" id="close-day-inp" min="1" max="31" inputmode="numeric">
+        </div>
+        <button class="add-btn" onclick="saveSettings()"><i class="ti ti-check icon-lg" aria-hidden="true"></i> Guardar configuración</button>
+        <button class="logout-btn" onclick="signOut()"><i class="ti ti-logout icon-lg" aria-hidden="true"></i> Cerrar sesión</button>
+      </div>
     </div>
 
     <div class="card">
@@ -166,21 +187,13 @@
     </div>
 
     <div class="card">
-      <button class="settings-toggle" onclick="toggleSettings()" id="settings-toggle" aria-expanded="false">
-        <span class="settings-toggle-label"><i class="ti ti-settings icon-lg" aria-hidden="true"></i> Configuración de tarjeta</span>
-        <i class="ti ti-chevron-down chevron" id="settings-chevron" aria-hidden="true"></i>
+      <button class="settings-toggle" onclick="toggleAccountsSettings()" id="accounts-toggle" aria-expanded="false">
+        <span class="settings-toggle-label"><i class="ti ti-wallet icon-lg" aria-hidden="true"></i> Configuración de cuentas</span>
+        <i class="ti ti-chevron-down chevron" id="accounts-chevron" aria-hidden="true"></i>
       </button>
-      <div class="settings-body hidden" id="settings-body">
-        <div>
-          <label for="card-name-inp">Nombre de la tarjeta</label>
-          <input type="text" id="card-name-inp" placeholder="Visa, Mastercard, Naranja...">
-        </div>
-        <div>
-          <label for="close-day-inp">Día de cierre</label>
-          <input type="number" id="close-day-inp" min="1" max="31" inputmode="numeric">
-        </div>
-        <button class="add-btn" onclick="saveSettings()"><i class="ti ti-check icon-lg" aria-hidden="true"></i> Guardar configuración</button>
-        <button class="logout-btn" onclick="signOut()"><i class="ti ti-logout icon-lg" aria-hidden="true"></i> Cerrar sesión</button>
+      <div class="settings-body hidden" id="accounts-body">
+        <div id="accounts-list"></div>
+        <button class="add-btn" onclick="addAccount()"><i class="ti ti-plus icon-lg" aria-hidden="true"></i> Nueva cuenta</button>
       </div>
     </div>
   </div>

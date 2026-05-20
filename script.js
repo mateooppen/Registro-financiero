@@ -11,8 +11,13 @@ let tokenExpiry = 0;
 let driveFileId = null;
 let appData = { transactions: [], config: { closeDay: 25, cardName: 'Tarjeta' } };
 let curY, curM;
-let curType = 'expense', curPay = 'cash';
+let curType = 'expense', curPay = 'cash', curAccount = 'fixed';
 let chartInst = null;
+const ACCOUNT_COLORS = ['#5fa8e0','#2ec48f','#e87654','#EF9F27','#a87ee6','#4A90A8','#E06B9E','#8B8B87'];
+const DEFAULT_ACCOUNTS = [
+  { id: 'fixed', name: 'Ingresos Fijos', color: '#5fa8e0' },
+  { id: 'variable', name: 'Ingresos Variables', color: '#2ec48f' }
+];
 let settingsOpen = false;
 let saveTimer = null;
 
@@ -175,6 +180,25 @@ async function loadOrCreateFile() {
 
   if (!appData.config) appData.config = {};
   if (!appData.config.rent) appData.config.rent = {};
+  migrateData();
+}
+
+function migrateData() {
+  if (!appData.config.accounts) appData.config.accounts = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
+  // Agregar color a cuentas sin color
+  appData.config.accounts.forEach((a, i) => {
+    if (!a.color) a.color = ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
+  });
+  let changed = false;
+  appData.transactions.forEach(t => {
+    if (t.account) return;
+    changed = true;
+    if (t.source === 'rent') t.account = 'fixed';
+    else if (t.payMethod === 'card') t.account = 'fixed';
+    else if (t.type === 'income') t.account = 'variable';
+    else t.account = 'variable';
+  });
+  if (changed) scheduleSave();
 }
 
 async function createFile() {
@@ -314,6 +338,7 @@ function setType(t) {
   document.getElementById('btn-inc').className = t === 'income' ? 'act-inc' : '';
   document.getElementById('btn-exp').className = t === 'expense' ? 'act-exp' : '';
   document.getElementById('pay-toggle').classList.toggle('hidden', t !== 'expense');
+  updateAccountToggle();
 }
 
 function setPayment(p) {
@@ -322,6 +347,113 @@ function setPayment(p) {
   document.getElementById('btn-card').className = p === 'card' ? 'act-card' : '';
   document.getElementById('installments-inp').classList.toggle('hidden', p !== 'card');
   if (p !== 'card') document.getElementById('installments-inp').value = '1';
+  updateAccountToggle();
+}
+
+function setAccount(a) {
+  curAccount = a;
+}
+
+function updateAccountToggle() {
+  const show = curType === 'expense' && curPay === 'cash';
+  const sel = document.getElementById('account-select');
+  sel.classList.toggle('hidden', !show);
+  if (show) renderAccountSelect();
+}
+
+function renderAccountSelect() {
+  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  const sel = document.getElementById('account-select');
+  sel.innerHTML = accounts.map(a =>
+    `<option value="${a.id}"${a.id === curAccount ? ' selected' : ''}>${esc(a.name)}</option>`
+  ).join('');
+}
+
+function getAccountName(accountId) {
+  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  const acc = accounts.find(a => a.id === accountId);
+  return acc ? acc.name : '';
+}
+
+// ── CONFIGURACIÓN DE CUENTAS ─────────────────────────────────────
+
+let accountsSettingsOpen = false;
+
+function toggleAccountsSettings() {
+  accountsSettingsOpen = !accountsSettingsOpen;
+  document.getElementById('accounts-body').classList.toggle('hidden', !accountsSettingsOpen);
+  document.getElementById('accounts-chevron').style.transform = accountsSettingsOpen ? 'rotate(180deg)' : '';
+  document.getElementById('accounts-toggle').setAttribute('aria-expanded', accountsSettingsOpen);
+  if (accountsSettingsOpen) renderAccountsSettings();
+}
+
+function renderAccountsSettings() {
+  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  const list = document.getElementById('accounts-list');
+  list.innerHTML = accounts.map((a, i) => {
+    const colorOptions = ACCOUNT_COLORS.map(c =>
+      `<span class="color-swatch${c === a.color ? ' active' : ''}" style="background:${c}" onclick="setAccountColor('${a.id}','${c}')" aria-label="Color"></span>`
+    ).join('');
+    const canDelete = !PROTECTED_ACCOUNTS.includes(a.id);
+    const delBtn = canDelete ? `<button class="account-del-btn" onclick="deleteAccount('${a.id}')" aria-label="Eliminar cuenta"><i class="ti ti-trash"></i></button>` : '';
+    return `<div class="account-config-item">
+      <div class="account-config-row">
+        <input type="text" class="account-name-inp" value="${esc(a.name)}" onchange="renameAccount('${a.id}', this.value)" placeholder="Nombre">
+        ${delBtn}
+      </div>
+      <div class="color-picker">${colorOptions}</div>
+    </div>`;
+  }).join('');
+}
+
+function renameAccount(id, newName) {
+  const name = newName.trim();
+  if (!name) return;
+  const acc = appData.config.accounts.find(a => a.id === id);
+  if (acc && acc.name !== name) {
+    acc.name = name;
+    scheduleSave();
+    render();
+  }
+}
+
+function setAccountColor(id, color) {
+  const acc = appData.config.accounts.find(a => a.id === id);
+  if (acc) {
+    acc.color = color;
+    scheduleSave();
+    renderAccountsSettings();
+    render();
+  }
+}
+
+function addAccount() {
+  const accounts = appData.config.accounts;
+  const id = 'acc_' + Date.now();
+  const usedColors = accounts.map(a => a.color);
+  const color = ACCOUNT_COLORS.find(c => !usedColors.includes(c)) || ACCOUNT_COLORS[accounts.length % ACCOUNT_COLORS.length];
+  accounts.push({ id, name: 'Nueva cuenta', color });
+  scheduleSave();
+  renderAccountsSettings();
+  renderAccountSelect();
+  render();
+}
+
+const PROTECTED_ACCOUNTS = ['fixed', 'variable'];
+
+function deleteAccount(id) {
+  if (PROTECTED_ACCOUNTS.includes(id)) { toast('Esta cuenta no se puede eliminar'); return; }
+  const accounts = appData.config.accounts;
+  const acc = accounts.find(a => a.id === id);
+  if (!acc) return;
+  if (!confirm('¿Eliminar la cuenta "' + acc.name + '"? Las transacciones asociadas se moverán a la primera cuenta.')) return;
+  const fallbackId = accounts.find(a => a.id !== id).id;
+  appData.transactions.forEach(t => { if (t.account === id) t.account = fallbackId; });
+  appData.config.accounts = accounts.filter(a => a.id !== id);
+  scheduleSave();
+  renderAccountsSettings();
+  renderAccountSelect();
+  render();
 }
 
 let rentSettingsOpen = false;
@@ -357,6 +489,9 @@ function resetForm() {
   document.getElementById('installments-inp').value = '1';
   setType('expense');
   setPayment('cash');
+  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  curAccount = accounts[0].id;
+  document.getElementById('account-select').value = curAccount;
 }
 
 function addTx() {
@@ -365,7 +500,8 @@ function addTx() {
   const date = document.getElementById('date-inp').value;
   if (!desc || isNaN(amount) || amount <= 0 || !date) { toast('Completá descripción, monto y fecha'); return; }
   const payMethod = curType === 'expense' ? curPay : 'income';
-  const tx = { id: Date.now(), type: curType, payMethod, desc, amount, date };
+  const txAccount = curType === 'income' ? 'variable' : curPay === 'card' ? 'fixed' : curAccount;
+  const tx = { id: Date.now(), type: curType, payMethod, desc, amount, date, account: txAccount };
   if (curType === 'expense' && curPay === 'card') {
     const installments = parseInt(document.getElementById('installments-inp').value) || 1;
     tx.installments = installments;
@@ -414,25 +550,125 @@ function getStats(y, m) {
   return { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance: income - cashExp - cardImpact, monthTx: mtx };
 }
 
+function getAccountStats(y, m, accountId) {
+  const key = mkey(y, m), txs = appData.transactions;
+  const atx = txs.filter(t => t.account === accountId);
+  const mtx = atx.filter(t => t.date && t.date.startsWith(key));
+  const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
+
+  // Crédito: este cierre y próximo cierre, separando consumos 1 pago vs cuotas
+  let nm = m + 1, ny = y;
+  if (nm > 11) { nm = 0; ny++; }
+  const nextKey = mkey(ny, nm);
+
+  let curSingle = 0, curInstallments = 0;   // este cierre
+  let nextSingle = 0, nextInstallments = 0; // próximo cierre
+
+  atx.forEach(t => {
+    if (t.payMethod !== 'card') return;
+    const isMulti = (t.installments || 1) > 1;
+    const amt = isMulti ? (t.installmentAmount || Math.round(t.amount / t.installments)) : t.amount;
+
+    // Checar impacto en este cierre (key)
+    if (t.impactKeys) {
+      if (t.impactKeys.indexOf(key) !== -1) {
+        if (isMulti) curInstallments += amt; else curSingle += amt;
+      }
+      if (t.impactKeys.indexOf(nextKey) !== -1) {
+        if (isMulti) nextInstallments += amt; else nextSingle += amt;
+      }
+    } else {
+      const ik = t.impactKey || '';
+      if (ik === key) { if (isMulti) curInstallments += amt; else curSingle += amt; }
+      if (ik === nextKey) { if (isMulti) nextInstallments += amt; else nextSingle += amt; }
+    }
+  });
+
+  const cardImpact = curSingle + curInstallments;
+  const cardNextImpact = nextSingle + nextInstallments;
+
+  return {
+    income, cashExp, cardImpact, cardNextImpact,
+    curSingle, curInstallments, nextSingle, nextInstallments,
+    balance: income - cashExp - cardImpact
+  };
+}
+
 // ── RENDER ────────────────────────────────────────────────────────
 
 function render() {
   const cfg = appData.config;
   document.getElementById('month-lbl').textContent = MONTHS[curM] + ' ' + curY;
+  renderAccountSelect();
   const { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance, monthTx } = getStats(curY, curM);
 
-  let creditLabel = fmt(cardAcc);
-  const creditParts = [];
-  if (cardAcc > 0) creditParts.push('consumido: ' + fmt(cardAcc));
-  if (cardImpactPrev > 0) creditParts.push('cuotas: ' + fmt(cardImpactPrev));
-  const creditSub = creditParts.length > 0 ? '<div class="credit-sub">' + creditParts.join(' + ') + '</div>' : '';
+  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  const accStats = accounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
-  document.getElementById('metrics-grid').innerHTML = `
-    <div class="metric"><div class="metric-label"><i class="ti ti-arrow-down-circle green" aria-hidden="true"></i>Ingresos</div><div class="metric-value green">${fmt(income)}</div></div>
-    <div class="metric"><div class="metric-label"><i class="ti ti-cash red" aria-hidden="true"></i>Gastos contado</div><div class="metric-value red">${fmt(cashExp)}</div></div>
-    <div class="metric"><div class="metric-label"><i class="ti ti-credit-card blue" aria-hidden="true"></i>Crédito este mes</div><div class="metric-value blue">${fmt(cardAcc + cardImpactPrev)}</div>${creditSub}</div>
-    <div class="metric"><div class="metric-label"><i class="ti ti-scale" aria-hidden="true"></i>Balance real</div><div class="metric-value ${balance >= 0 ? 'pos' : 'neg'}">${balance < 0 ? '-' : ''}${fmt(balance)}</div></div>
-  `;
+  function metricCard(icon, label, colorClass, valueFn) {
+    const rows = accStats.map(a => {
+      const val = valueFn(a.st);
+      return `<div class="metric-row">
+        <span class="metric-acc-name"><span class="acc-dot" style="background:${a.color || '#8B8B87'}"></span>${esc(a.name)}</span>
+        <span class="metric-acc-value ${colorClass}">${val < 0 ? '-' : ''}${fmt(val)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="metric-card">
+      <div class="metric-card-header"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
+      ${rows}
+    </div>`;
+  }
+
+  let metricsHtml = '';
+  metricsHtml += metricCard('arrow-down-circle', 'Ingresos', 'green', s => s.income);
+  metricsHtml += metricCard('cash', 'Gastos', 'red', s => s.cashExp);
+
+  // Crédito: card separada
+  const creditEl = document.getElementById('credit-card-detail');
+  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
+  if (accWithCard.length) {
+    let creditContent = '<div class="section-label">Crédito</div>';
+    accWithCard.forEach(a => {
+      const s = a.st;
+      if (accWithCard.length > 1) {
+        creditContent += `<div class="credit-acc-label">${esc(a.name)}</div>`;
+      }
+
+      function creditSection(label, single, installments) {
+        const total = single + installments;
+        if (total === 0) return '';
+        let html = `<div class="credit-section"><div class="credit-section-label">${label}</div>`;
+        if (single > 0) html += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(single)}</span></div>`;
+        if (installments > 0) html += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(installments)}</span></div>`;
+        if (single > 0 && installments > 0) html += `<div class="metric-row credit-total"><span class="credit-detail-label">Total</span><span class="metric-acc-value blue">${fmt(total)}</span></div>`;
+        html += `</div>`;
+        return html;
+      }
+
+      creditContent += creditSection('Este cierre', s.curSingle, s.curInstallments);
+      creditContent += creditSection('Próximo cierre', s.nextSingle, s.nextInstallments);
+    });
+    creditEl.innerHTML = creditContent;
+    creditEl.classList.remove('hidden');
+  } else {
+    creditEl.classList.add('hidden');
+  }
+  // Balance necesita color dinámico por fila, se arma aparte
+  const balanceRows = accStats.map(a => {
+    const b = a.st.balance;
+    const cls = b >= 0 ? 'pos' : 'neg';
+    return `<div class="metric-row">
+      <span class="metric-acc-name"><span class="acc-dot" style="background:${a.color || '#8B8B87'}"></span>${esc(a.name)}</span>
+      <span class="metric-acc-value ${cls}">${b < 0 ? '-' : ''}${fmt(b)}</span>
+    </div>`;
+  }).join('');
+  metricsHtml += `<div class="metric-card">
+    <div class="metric-card-header"><i class="ti ti-scale" aria-hidden="true"></i>Balance</div>
+    ${balanceRows}
+  </div>`;
+
+  document.getElementById('metrics-grid').innerHTML = metricsHtml;
 
   document.getElementById('credit-banner').classList.add('hidden');
 
@@ -456,6 +692,8 @@ function render() {
       } else {
         sub = t.type === 'income' ? 'Ingreso' : 'Contado';
       }
+      const accName = getAccountName(t.account);
+      if (accName) sub += ' · ' + accName;
       const amountDisplay = t.payMethod === 'card' && (t.installments || 1) > 1
         ? `${fmt(t.amount)}`
         : `${fmt(t.amount)}`;
@@ -650,7 +888,8 @@ async function checkAndGenerateRent() {
                     desc: 'Alquiler (Automático)',
                     amount: amount,
                     date: paymentDate,
-                    source: 'rent'
+                    source: 'rent',
+                    account: 'fixed'
                 };
                 appData.transactions.push(newTx);
                 updated = true;
