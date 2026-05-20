@@ -298,7 +298,16 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
           </div>
           <div>
             <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Inicio contrato</label>
-            <input type="date" id="rent-start-date">
+            <div style="display:flex;gap:6px">
+              <select id="rent-start-month-m" style="flex:1">
+                <option value="">Mes</option>
+                <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+                <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+                <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+                <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+              </select>
+              <select id="rent-start-month-y" style="flex:1"></select>
+            </div>
           </div>
           <div>
             <label style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">Aumento cada (meses)</label>
@@ -340,7 +349,9 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 <script>
 const CLIENT_ID = '926576243590-0ffu3hgsn4qmsdua6bekbb0s7443j2cn.apps.googleusercontent.com';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const REDIRECT_URI = 'https://mateooppen.github.io/Registro-financiero/';
+const REDIRECT_URI = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+  ? location.origin
+  : 'https://mateooppen.github.io/Registro-financiero/';
 const FILE_NAME = 'finanzas_data.json';
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -513,12 +524,22 @@ function showApp() {
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
   document.getElementById('card-name-inp').value = appData.config.cardName;
   document.getElementById('close-day-inp').value = appData.config.closeDay;
+  // Poblar select de años para alquiler
+  const ySel = document.getElementById('rent-start-month-y');
+  ySel.innerHTML = '<option value="">Año</option>';
+  for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 2; y++) {
+    ySel.innerHTML += `<option value="${y}">${y}</option>`;
+  }
   // Cargar valores de alquiler en los inputs si existen
   const rc = appData.config.rent;
   if (rc && rc.baseAmount) {
     document.getElementById('rent-base-amount').value = rc.baseAmount;
     document.getElementById('rent-day').value = rc.day;
-    document.getElementById('rent-start-month').value = rc.startMonth;
+    if (rc.startMonth) {
+      const [sy, sm] = rc.startMonth.split('-');
+      document.getElementById('rent-start-month-m').value = sm;
+      document.getElementById('rent-start-month-y').value = sy;
+    }
     document.getElementById('rent-freq').value = rc.increaseFreq;
     document.getElementById('rent-percent').value = rc.percent;
   }
@@ -600,7 +621,8 @@ function toggleSettings() {
 function saveSettings() {
   const name = document.getElementById('card-name-inp').value.trim() || 'Tarjeta';
   const day = Math.min(31, Math.max(1, parseInt(document.getElementById('close-day-inp').value) || 25));
-  appData.config = { cardName: name, closeDay: day };
+  appData.config.cardName = name;
+  appData.config.closeDay = day;
   toggleSettings();
   scheduleSave();
   toast('Configuración guardada');
@@ -930,7 +952,7 @@ async function checkAndGenerateRent() {
     if (updated) {
         appData.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
         await scheduleSave();
-        renderAll();
+        render();
     }
 }
 
@@ -938,10 +960,10 @@ function saveRentConfig() {
   appData.config.rent = {
       baseAmount: parseFloat(document.getElementById('rent-base-amount').value),
       day: parseInt(document.getElementById('rent-day').value),
-      startMonth: document.getElementById('rent-start-month').value,
+      startMonth: document.getElementById('rent-start-month-y').value + '-' + document.getElementById('rent-start-month-m').value,
       increaseFreq: parseInt(document.getElementById('rent-freq').value),
       percent: parseFloat(document.getElementById('rent-percent').value),
-      lastDismissed: appData.config.rent.lastDismissed || null
+      lastDismissed: (appData.config.rent && appData.config.rent.lastDismissed) || null
   };
   scheduleSave();
   alert("Configuración de alquiler guardada. Se registrarán los cobros pendientes.");
