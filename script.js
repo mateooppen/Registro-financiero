@@ -768,7 +768,7 @@ function renderInstallments() {
     const [y, m] = k.split('-').map(Number);
     const mName = MONTHS[m - 1].slice(0, 3);
     const finBadge = d.finishes > 0
-      ? `<span class="mp-fin"><i class="ti ti-check icon-xs" aria-hidden="true"></i>${d.finishes}</span>`
+      ? `<span class="mp-fin">${d.finishes}</span>`
       : '';
     return `<div class="mp"><div class="mp-top"><span class="mp-month">${mName}</span>${finBadge}</div><div class="mp-amount">${fmtK(d.total)}</div></div>`;
   }).join('');
@@ -818,7 +818,7 @@ function renderChart() {
 
 function renderHist(cfg) {
   const months = [];
-  for (let i = 5; i >= 0; i--) { let m = curM - i, y = curY; while (m < 0) { m += 12; y--; } months.push({ y, m }); }
+  for (let i = 0; i <= 5; i++) { let m = curM - i, y = curY; while (m < 0) { m += 12; y--; } months.push({ y, m }); }
   const cur = mkey(curY, curM);
   document.getElementById('hist-row').innerHTML = months.map(({ y, m }) => {
     const k = mkey(y, m);
@@ -1024,5 +1024,47 @@ async function init() {
 
   await showAuth();
 }
+
+// Horizontal scroll: wheel + drag (desktop)
+const DRAG_SELECTOR = '.scroll-row, .hist-row';
+document.addEventListener('wheel', e => {
+  const row = e.target.closest(DRAG_SELECTOR);
+  if (!row) return;
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    e.preventDefault();
+    row.scrollLeft += e.deltaY;
+  }
+}, { passive: false });
+
+(function initDragScroll() {
+  let dragEl = null, startX = 0, startScroll = 0, dragged = false;
+  document.addEventListener('mousedown', e => {
+    const row = e.target.closest(DRAG_SELECTOR);
+    if (!row || e.button !== 0) return;
+    dragEl = row;
+    startX = e.pageX;
+    startScroll = row.scrollLeft;
+    dragged = false;
+    row.style.cursor = 'grabbing';
+    row.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragEl) return;
+    const dx = e.pageX - startX;
+    if (Math.abs(dx) > 3) dragged = true;
+    dragEl.scrollLeft = startScroll - dx;
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragEl) return;
+    dragEl.style.cursor = '';
+    dragEl.style.userSelect = '';
+    if (dragged) setTimeout(() => { dragged = false; }, 0);
+    dragEl = null;
+  });
+  // Prevent click on hist-cards when dragging
+  document.addEventListener('click', e => {
+    if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; }
+  }, true);
+})();
 
 init();
