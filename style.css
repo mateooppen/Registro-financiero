@@ -74,7 +74,7 @@ input[type=text],input[type=number],input[type=date]{width:100%;height:42px;bord
 input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .add-btn{width:100%;height:44px;border:none;border-radius:8px;background:var(--text);color:var(--bg);font-size:14px;font-weight:500;font-family:var(--font);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px}
 .add-btn:active{opacity:0.85}
-.tx-list{display:flex;flex-direction:column}
+.tx-list{display:flex;flex-direction:column;max-height:400px;overflow-y:auto}
 .tx-item{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:0.5px solid var(--border)}
 .tx-item:last-child{border-bottom:none}
 .tx-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
@@ -128,22 +128,21 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .inst-badge{font-size:11px;color:var(--blue-text);background:var(--blue-bg);padding:1px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0}
 .inst-badge.last{color:var(--green-text);background:var(--green-bg)}
 .inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
-.metric-card{border-bottom:0.5px solid var(--border);padding:12px 16px}
+.metric-card{border-bottom:0.5px solid var(--border);padding:12px 16px;cursor:pointer}
 .metric-card:last-child{border-bottom:none}
-.metric-card-header{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:5px;margin-bottom:8px}
-.metric-card-header i{font-size:13px}
+.metric-card:active{background:var(--bg2)}
+.metric-card-header{display:flex;align-items:center;justify-content:space-between}
+.metric-card-left{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:5px}
+.metric-card-left i{font-size:13px}
+.metric-card-right{display:flex;align-items:center;gap:6px}
+.metric-total{font-size:16px;font-weight:500}
+.metric-chevron{font-size:14px;color:var(--text3);transition:transform .2s}
+.metric-detail{padding-top:10px}
 .metric-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
 .metric-acc-name{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:5px}
-.metric-acc-value{font-size:16px;font-weight:500}
+.metric-acc-value{font-size:14px;font-weight:500}
 .metric-acc-right{text-align:right}
-.credit-section{padding:0 16px 12px}
-.credit-section + .credit-section{border-top:0.5px solid var(--border);padding-top:10px}
-.credit-breakdown{padding:2px 0 4px}
 .credit-detail-label{font-size:12px;color:var(--text3)}
-.credit-total{border-top:0.5px solid var(--border);margin-top:4px;padding-top:6px}
-.credit-total .credit-detail-label{color:var(--text);font-weight:500}
-.credit-acc-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-top:6px;margin-bottom:2px}
-.credit-section-label{font-size:12px;font-weight:500;color:var(--text);margin-bottom:4px}
 .acc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .account-config-item{padding:8px 0;border-bottom:0.5px solid var(--border)}
 .account-config-item:last-child{border-bottom:none}

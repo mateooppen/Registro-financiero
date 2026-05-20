@@ -464,6 +464,15 @@ function toggleRentSettings() {
   document.getElementById('rent-toggle').setAttribute('aria-expanded', rentSettingsOpen);
 }
 
+function toggleMetric(id) {
+  const card = document.getElementById('mc-' + id);
+  if (!card) return;
+  const detail = card.querySelector('.metric-detail');
+  const chevron = card.querySelector('.metric-chevron');
+  const open = detail.classList.toggle('hidden');
+  chevron.style.transform = open ? '' : 'rotate(180deg)';
+}
+
 function toggleSettings() {
   settingsOpen = !settingsOpen;
   document.getElementById('settings-body').classList.toggle('hidden', !settingsOpen);
@@ -606,56 +615,37 @@ function render() {
   const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
   const accStats = accounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
-  function metricCard(icon, label, colorClass, valueFn) {
-    const rows = accStats.map(a => {
+  function metricCard(id, icon, label, colorClass, total, detailRows) {
+    const sign = total < 0 ? '-' : '';
+    const valClass = id === 'balance' ? (total >= 0 ? 'pos' : 'neg') : colorClass;
+    return `<div class="metric-card" id="mc-${id}" onclick="toggleMetric('${id}')">
+      <div class="metric-card-header">
+        <span class="metric-card-left"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</span>
+        <span class="metric-card-right">
+          <span class="metric-total ${valClass}">${sign}${fmt(total)}</span>
+          <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
+        </span>
+      </div>
+      <div class="metric-detail hidden">${detailRows}</div>
+    </div>`;
+  }
+
+  function accRows(colorClass, valueFn) {
+    return accStats.map(a => {
       const val = valueFn(a.st);
       return `<div class="metric-row">
         <span class="metric-acc-name"><span class="acc-dot" style="background:${a.color || '#8B8B87'}"></span>${esc(a.name)}</span>
         <span class="metric-acc-value ${colorClass}">${val < 0 ? '-' : ''}${fmt(val)}</span>
       </div>`;
     }).join('');
-    return `<div class="metric-card">
-      <div class="metric-card-header"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
-      ${rows}
-    </div>`;
   }
 
   let metricsHtml = '';
-  metricsHtml += metricCard('arrow-down-circle', 'Ingresos', 'green', s => s.income);
-  metricsHtml += metricCard('cash', 'Gastos', 'red', s => s.cashExp);
+  metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accRows('green', s => s.income));
+  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', cashExp, accRows('red', s => s.cashExp));
 
-  // Crédito: card separada
-  const creditEl = document.getElementById('credit-card-detail');
-  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
-  if (accWithCard.length) {
-    let creditContent = '<div class="section-label">Crédito</div>';
-    accWithCard.forEach(a => {
-      const s = a.st;
-      if (accWithCard.length > 1) {
-        creditContent += `<div class="credit-acc-label">${esc(a.name)}</div>`;
-      }
-
-      function creditSection(label, single, installments) {
-        const total = single + installments;
-        if (total === 0) return '';
-        let html = `<div class="credit-section"><div class="credit-section-label">${label}</div>`;
-        if (single > 0) html += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(single)}</span></div>`;
-        if (installments > 0) html += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(installments)}</span></div>`;
-        if (single > 0 && installments > 0) html += `<div class="metric-row credit-total"><span class="credit-detail-label">Total</span><span class="metric-acc-value blue">${fmt(total)}</span></div>`;
-        html += `</div>`;
-        return html;
-      }
-
-      creditContent += creditSection('Este cierre', s.curSingle, s.curInstallments);
-      creditContent += creditSection('Próximo cierre', s.nextSingle, s.nextInstallments);
-    });
-    creditEl.innerHTML = creditContent;
-    creditEl.classList.remove('hidden');
-  } else {
-    creditEl.classList.add('hidden');
-  }
-  // Balance necesita color dinámico por fila, se arma aparte
-  const balanceRows = accStats.map(a => {
+  // Balance
+  const balanceDetail = accStats.map(a => {
     const b = a.st.balance;
     const cls = b >= 0 ? 'pos' : 'neg';
     return `<div class="metric-row">
@@ -663,12 +653,62 @@ function render() {
       <span class="metric-acc-value ${cls}">${b < 0 ? '-' : ''}${fmt(b)}</span>
     </div>`;
   }).join('');
-  metricsHtml += `<div class="metric-card">
-    <div class="metric-card-header"><i class="ti ti-scale" aria-hidden="true"></i>Balance</div>
-    ${balanceRows}
-  </div>`;
+  metricsHtml += metricCard('balance', 'scale', 'Balance', '', balance, balanceDetail);
 
   document.getElementById('metrics-grid').innerHTML = metricsHtml;
+
+  // Crédito: card separada
+  const creditEl = document.getElementById('credit-card-detail');
+  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
+  if (accWithCard.length) {
+    // Totals for collapsed view
+    let totalCur = 0, totalNext = 0;
+    accWithCard.forEach(a => { totalCur += a.st.curSingle + a.st.curInstallments; totalNext += a.st.nextSingle + a.st.nextInstallments; });
+
+    let creditContent = '';
+    // Este cierre
+    if (totalCur > 0) {
+      let curDetail = '';
+      accWithCard.forEach(a => {
+        const s = a.st;
+        if (s.curSingle > 0) curDetail += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(s.curSingle)}</span></div>`;
+        if (s.curInstallments > 0) curDetail += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(s.curInstallments)}</span></div>`;
+      });
+      creditContent += `<div class="metric-card" id="mc-credit-cur" onclick="toggleMetric('credit-cur')">
+        <div class="metric-card-header">
+          <span class="metric-card-left"><i class="ti ti-credit-card blue" aria-hidden="true"></i>Este cierre</span>
+          <span class="metric-card-right">
+            <span class="metric-total blue">${fmt(totalCur)}</span>
+            <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
+          </span>
+        </div>
+        <div class="metric-detail hidden">${curDetail}</div>
+      </div>`;
+    }
+    // Próximo cierre
+    if (totalNext > 0) {
+      let nextDetail = '';
+      accWithCard.forEach(a => {
+        const s = a.st;
+        if (s.nextSingle > 0) nextDetail += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(s.nextSingle)}</span></div>`;
+        if (s.nextInstallments > 0) nextDetail += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(s.nextInstallments)}</span></div>`;
+      });
+      creditContent += `<div class="metric-card" id="mc-credit-next" onclick="toggleMetric('credit-next')">
+        <div class="metric-card-header">
+          <span class="metric-card-left"><i class="ti ti-credit-card blue" aria-hidden="true"></i>Próximo cierre</span>
+          <span class="metric-card-right">
+            <span class="metric-total blue">${fmt(totalNext)}</span>
+            <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
+          </span>
+        </div>
+        <div class="metric-detail hidden">${nextDetail}</div>
+      </div>`;
+    }
+    creditEl.innerHTML = creditContent;
+    creditEl.classList.toggle('hidden', !creditContent);
+  } else {
+    creditEl.classList.add('hidden');
+  }
 
   document.getElementById('credit-banner').classList.add('hidden');
 
