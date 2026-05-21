@@ -50,7 +50,7 @@ html,body{height:100%;background:var(--bg3);font-family:var(--font);color:var(--
 .loading-text{font-size:13px;color:var(--text2)}
 .content{padding:12px 12px 100px;display:flex;flex-direction:column;gap:12px}
 .card{background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border);overflow:hidden}
-.metrics{background:var(--bg);border-radius:var(--radius-lg);overflow:hidden;border:0.5px solid var(--border)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;min-width:0;overflow:hidden}
 .metric{background:var(--bg);padding:14px 16px}
 .metric-label{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:4px}
 .metric-label i{font-size:12px}
@@ -102,7 +102,8 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .hist-nums{display:flex;flex-direction:column;gap:2px;font-size:11px}
 .settings-toggle{width:100%;background:none;border:none;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font);font-size:13px;color:var(--text2)}
 .settings-toggle:active{background:var(--bg2)}
-.settings-body{padding:0 16px 14px;display:flex;flex-direction:column;gap:8px}
+.collapsed{max-height:0!important;opacity:0;overflow:hidden;margin-top:0;padding-top:0;padding-bottom:0;border-color:transparent}
+.settings-body{padding:0 16px 14px;display:flex;flex-direction:column;gap:8px;overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease}
 .settings-body label{font-size:12px;color:var(--text2);margin-bottom:2px;display:block}
 .logout-btn{width:100%;height:44px;border:0.5px solid var(--border2);border-radius:8px;background:transparent;color:var(--text2);font-size:14px;font-family:var(--font);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .logout-btn:active{background:var(--bg2)}
@@ -119,7 +120,7 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .mp-amount.zero{color:var(--text3);font-size:11px;font-weight:400}
 .inst-toggle{width:100%;background:none;border:none;border-top:0.5px solid var(--border);padding:10px 16px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:var(--font)}
 .inst-toggle:active{background:var(--bg2)}
-.inst-detail{padding:0 16px 12px;border-top:0.5px solid var(--border);background:var(--bg2)}
+.inst-detail{padding:0 16px 12px;border-top:0.5px solid var(--border);background:var(--bg2);overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease}
 .inst-mh{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:4px}
 .inst-mh-name{font-size:13px;font-weight:500;color:var(--text)}
 .inst-mh-total{font-size:14px;font-weight:500;color:var(--blue)}
@@ -128,21 +129,27 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .inst-badge{font-size:11px;color:var(--blue-text);background:var(--blue-bg);padding:1px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0}
 .inst-badge.last{color:var(--green-text);background:var(--green-bg)}
 .inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
-.metric-card{border-bottom:0.5px solid var(--border);padding:12px 16px;cursor:pointer}
-.metric-card:last-child{border-bottom:none}
-.metric-card:active{background:var(--bg2)}
-.metric-card-header{display:flex;align-items:center;justify-content:space-between}
-.metric-card-left{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:5px}
-.metric-card-left i{font-size:13px}
-.metric-card-right{display:flex;align-items:center;gap:6px}
-.metric-total{font-size:16px;font-weight:500}
+.metric-card{background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:14px 16px;display:flex;flex-direction:column;cursor:pointer;min-width:0;overflow:hidden}
+.metric-card:last-child:nth-child(odd){grid-column:1/-1}
+.metric-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.metric-card-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:5px}
 .metric-chevron{font-size:14px;color:var(--text3);transition:transform .2s}
-.metric-detail{padding-top:10px}
-.metric-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
-.metric-acc-name{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:5px}
-.metric-acc-value{font-size:14px;font-weight:500}
-.metric-acc-right{text-align:right}
-.credit-detail-label{font-size:12px;color:var(--text3)}
+.metric-card-label i{font-size:13px}
+.metric-card-total{font-size:22px;font-weight:500}
+.metric-card-accounts-wrap{display:grid;grid-template-rows:1fr;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);transition:grid-template-rows .25s ease,opacity .2s ease,margin-top .25s ease,padding-top .25s ease,border-color .25s ease;opacity:1}
+.metric-card-accounts-wrap.collapsed{grid-template-rows:0fr;opacity:0;margin-top:0;padding-top:0;border-top-color:transparent}
+.metric-card-accounts{overflow:hidden;min-height:0;display:flex;flex-direction:column;gap:6px}
+.metric-card-accounts.is-credit{flex-direction:row;gap:8px}
+.metric-acc-row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+.metric-acc-col{flex:1;min-width:0}
+.metric-acc-name{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.metric-acc-row .metric-acc-name{flex:1;margin-bottom:0}
+.metric-acc-value{font-size:13px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.credit-sub-list{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border)}
+.credit-sub-item{display:flex;flex-direction:column;padding:3px 0}
+.credit-sub-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:3px;margin-bottom:1px}
+.credit-sub-label i{font-size:11px;opacity:.7}
+.credit-sub-val{font-size:13px;font-weight:500;color:var(--text)}
 .acc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .account-config-item{padding:8px 0;border-bottom:0.5px solid var(--border)}
 .account-config-item:last-child{border-bottom:none}
@@ -186,7 +193,6 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .icon-xxl{font-size:18px}
 .chevron{font-size:15px;transition:transform .2s}
 .icon-xs{font-size:10px}
-.credit-sub{font-size:11px;color:var(--text3);margin-top:2px}
 .hist-income{color:var(--green)}
 .hist-expense{color:var(--red)}
 .hist-balance{font-weight:500}

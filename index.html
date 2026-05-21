@@ -92,7 +92,7 @@
       <div class="section-label">Cuotas pendientes</div>
       <div class="scroll-row" id="inst-summary"></div>
       <button class="inst-toggle" id="inst-toggle-btn" onclick="toggleInstDetail()"><i class="ti ti-chevron-down icon-md" aria-hidden="true"></i> Ver detalle de cuotas</button>
-      <div class="inst-detail hidden" id="inst-detail"></div>
+      <div class="inst-detail collapsed" id="inst-detail"></div>
     </div>
 
     <div class="card">
@@ -125,7 +125,7 @@
         <span class="settings-toggle-label"><i class="ti ti-settings icon-lg" aria-hidden="true"></i> Configuración de tarjeta</span>
         <i class="ti ti-chevron-down chevron" id="settings-chevron" aria-hidden="true"></i>
       </button>
-      <div class="settings-body hidden" id="settings-body">
+      <div class="settings-body collapsed" id="settings-body">
         <div>
           <label for="card-name-inp">Nombre de la tarjeta</label>
           <input type="text" id="card-name-inp" placeholder="Visa, Mastercard, Naranja...">
@@ -148,7 +148,7 @@
         <i class="ti ti-chevron-down chevron" id="rent-chevron" aria-hidden="true"></i>
       </button>
 
-      <div class="settings-body hidden" id="rent-body">
+      <div class="settings-body collapsed" id="rent-body">
         <div class="form-grid">
           <div class="full">
             <label>Monto Inicial ($)</label>
@@ -191,7 +191,7 @@
         <span class="settings-toggle-label"><i class="ti ti-wallet icon-lg" aria-hidden="true"></i> Configuración de cuentas</span>
         <i class="ti ti-chevron-down chevron" id="accounts-chevron" aria-hidden="true"></i>
       </button>
-      <div class="settings-body hidden" id="accounts-body">
+      <div class="settings-body collapsed" id="accounts-body">
         <div id="accounts-list"></div>
         <button class="add-btn" onclick="addAccount()"><i class="ti ti-plus icon-lg" aria-hidden="true"></i> Nueva cuenta</button>
       </div>

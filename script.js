@@ -304,6 +304,11 @@ function showSaveBar(msg, success) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmt(v) { return '$' + Math.abs(v).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+function fmtK(v) {
+  if (v >= 1000000) { const n = v / 1000000; return '$' + (n % 1 === 0 ? n : n.toFixed(1)) + 'M'; }
+  if (v >= 1000) { const n = v / 1000; return '$' + (n % 1 === 0 ? n : n.toFixed(1)) + 'k'; }
+  return '$' + v;
+}
 function mkey(y, m) { return y + '-' + String(m + 1).padStart(2, '0'); }
 function fmtDate(s) { const [, mo, d] = s.split('-'); return d + '/' + mo; }
 
@@ -381,7 +386,8 @@ let accountsSettingsOpen = false;
 
 function toggleAccountsSettings() {
   accountsSettingsOpen = !accountsSettingsOpen;
-  document.getElementById('accounts-body').classList.toggle('hidden', !accountsSettingsOpen);
+  const body = document.getElementById('accounts-body');
+  animateToggle(body, accountsSettingsOpen);
   document.getElementById('accounts-chevron').style.transform = accountsSettingsOpen ? 'rotate(180deg)' : '';
   document.getElementById('accounts-toggle').setAttribute('aria-expanded', accountsSettingsOpen);
   if (accountsSettingsOpen) renderAccountsSettings();
@@ -459,23 +465,37 @@ function deleteAccount(id) {
 let rentSettingsOpen = false;
 function toggleRentSettings() {
   rentSettingsOpen = !rentSettingsOpen;
-  document.getElementById('rent-body').classList.toggle('hidden', !rentSettingsOpen);
+  const body = document.getElementById('rent-body');
+  animateToggle(body, rentSettingsOpen);
   document.getElementById('rent-chevron').style.transform = rentSettingsOpen ? 'rotate(180deg)' : '';
   document.getElementById('rent-toggle').setAttribute('aria-expanded', rentSettingsOpen);
+}
+
+function animateToggle(el, opening) {
+  if (opening) {
+    el.classList.remove('collapsed');
+    el.style.maxHeight = el.scrollHeight + 'px';
+    el.addEventListener('transitionend', () => { el.style.maxHeight = ''; }, { once: true });
+  } else {
+    el.style.maxHeight = el.scrollHeight + 'px';
+    requestAnimationFrame(() => { el.style.maxHeight = '0'; el.classList.add('collapsed'); });
+  }
 }
 
 function toggleMetric(id) {
   const card = document.getElementById('mc-' + id);
   if (!card) return;
-  const detail = card.querySelector('.metric-detail');
+  const wrap = card.querySelector('.metric-card-accounts-wrap');
   const chevron = card.querySelector('.metric-chevron');
-  const open = detail.classList.toggle('hidden');
-  chevron.style.transform = open ? '' : 'rotate(180deg)';
+  const opening = wrap.classList.contains('collapsed');
+  wrap.classList.toggle('collapsed', !opening);
+  chevron.style.transform = opening ? 'rotate(180deg)' : '';
 }
 
 function toggleSettings() {
   settingsOpen = !settingsOpen;
-  document.getElementById('settings-body').classList.toggle('hidden', !settingsOpen);
+  const body = document.getElementById('settings-body');
+  animateToggle(body, settingsOpen);
   document.getElementById('settings-chevron').style.transform = settingsOpen ? 'rotate(180deg)' : '';
   document.getElementById('settings-toggle').setAttribute('aria-expanded', settingsOpen);
 }
@@ -615,100 +635,69 @@ function render() {
   const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
   const accStats = accounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
-  function metricCard(id, icon, label, colorClass, total, detailRows) {
+  function metricCard(id, icon, label, colorClass, total, accBreakdown, variant) {
     const sign = total < 0 ? '-' : '';
-    const valClass = id === 'balance' ? (total >= 0 ? 'pos' : 'neg') : colorClass;
+    const valClass = colorClass || (total >= 0 ? 'pos' : 'neg');
+    const variantCls = variant ? ` ${variant}` : '';
     return `<div class="metric-card" id="mc-${id}" onclick="toggleMetric('${id}')">
-      <div class="metric-card-header">
-        <span class="metric-card-left"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</span>
-        <span class="metric-card-right">
-          <span class="metric-total ${valClass}">${sign}${fmt(total)}</span>
-          <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
-        </span>
+      <div class="metric-card-top">
+        <div class="metric-card-label"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
+        <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
       </div>
-      <div class="metric-detail hidden">${detailRows}</div>
+      <div class="metric-card-total ${valClass}">${sign}${fmt(total)}</div>
+      <div class="metric-card-accounts-wrap collapsed">
+        <div class="metric-card-accounts${variantCls}">${accBreakdown}</div>
+      </div>
     </div>`;
   }
 
-  function accRows(colorClass, valueFn) {
+  function accCols(colorClass, valueFn) {
     return accStats.map(a => {
       const val = valueFn(a.st);
-      return `<div class="metric-row">
+      const cls = colorClass || (val >= 0 ? 'pos' : 'neg');
+      return `<div class="metric-acc-row">
         <span class="metric-acc-name"><span class="acc-dot" style="background:${a.color || '#8B8B87'}"></span>${esc(a.name)}</span>
-        <span class="metric-acc-value ${colorClass}">${val < 0 ? '-' : ''}${fmt(val)}</span>
+        <span class="metric-acc-value ${cls}">${val < 0 ? '-' : ''}${fmt(val)}</span>
       </div>`;
     }).join('');
   }
 
   let metricsHtml = '';
-  metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accRows('green', s => s.income));
-  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', cashExp, accRows('red', s => s.cashExp));
+  metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accCols('green', s => s.income));
+  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', cashExp, accCols('red', s => s.cashExp));
+
+  // Crédito: dentro de la grilla si hay actividad
+  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
+  let totalCur = 0, totalNext = 0, totalCurSingle = 0, totalCurInst = 0, totalNextSingle = 0, totalNextInst = 0;
+  accWithCard.forEach(a => {
+    totalCurSingle += a.st.curSingle; totalCurInst += a.st.curInstallments;
+    totalNextSingle += a.st.nextSingle; totalNextInst += a.st.nextInstallments;
+  });
+  totalCur = totalCurSingle + totalCurInst;
+  totalNext = totalNextSingle + totalNextInst;
+  const totalCredit = totalCur + totalNext;
+  if (totalCredit > 0) {
+    function creditCol(label, total, single, inst) {
+      if (total === 0) return '';
+      let sub = '';
+      if (single > 0) sub += `<div class="credit-sub-item"><span class="credit-sub-label"><i class="ti ti-receipt" aria-hidden="true"></i>Consumido</span><span class="credit-sub-val">${fmtK(single)}</span></div>`;
+      if (inst > 0) sub += `<div class="credit-sub-item"><span class="credit-sub-label"><i class="ti ti-calendar-repeat" aria-hidden="true"></i>Cuotas</span><span class="credit-sub-val">${fmtK(inst)}</span></div>`;
+      return `<div class="metric-acc-col">
+        <span class="metric-acc-name">${label}</span>
+        <span class="metric-acc-value blue">${fmt(total)}</span>
+        ${sub ? `<div class="credit-sub-list">${sub}</div>` : ''}
+      </div>`;
+    }
+    const creditCols = creditCol('Este cierre', totalCur, totalCurSingle, totalCurInst) +
+      creditCol('Próximo cierre', totalNext, totalNextSingle, totalNextInst);
+    metricsHtml += metricCard('credit', 'credit-card', 'Crédito', 'blue', totalCur, creditCols, 'is-credit');
+  }
 
   // Balance
-  const balanceDetail = accStats.map(a => {
-    const b = a.st.balance;
-    const cls = b >= 0 ? 'pos' : 'neg';
-    return `<div class="metric-row">
-      <span class="metric-acc-name"><span class="acc-dot" style="background:${a.color || '#8B8B87'}"></span>${esc(a.name)}</span>
-      <span class="metric-acc-value ${cls}">${b < 0 ? '-' : ''}${fmt(b)}</span>
-    </div>`;
-  }).join('');
-  metricsHtml += metricCard('balance', 'scale', 'Balance', '', balance, balanceDetail);
+  metricsHtml += metricCard('balance', 'scale', 'Balance', '', balance, accCols('', s => s.balance));
 
   document.getElementById('metrics-grid').innerHTML = metricsHtml;
-
-  // Crédito: card separada
-  const creditEl = document.getElementById('credit-card-detail');
-  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
-  if (accWithCard.length) {
-    // Totals for collapsed view
-    let totalCur = 0, totalNext = 0;
-    accWithCard.forEach(a => { totalCur += a.st.curSingle + a.st.curInstallments; totalNext += a.st.nextSingle + a.st.nextInstallments; });
-
-    let creditContent = '';
-    // Este cierre
-    if (totalCur > 0) {
-      let curDetail = '';
-      accWithCard.forEach(a => {
-        const s = a.st;
-        if (s.curSingle > 0) curDetail += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(s.curSingle)}</span></div>`;
-        if (s.curInstallments > 0) curDetail += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(s.curInstallments)}</span></div>`;
-      });
-      creditContent += `<div class="metric-card" id="mc-credit-cur" onclick="toggleMetric('credit-cur')">
-        <div class="metric-card-header">
-          <span class="metric-card-left"><i class="ti ti-credit-card blue" aria-hidden="true"></i>Este cierre</span>
-          <span class="metric-card-right">
-            <span class="metric-total blue">${fmt(totalCur)}</span>
-            <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
-          </span>
-        </div>
-        <div class="metric-detail hidden">${curDetail}</div>
-      </div>`;
-    }
-    // Próximo cierre
-    if (totalNext > 0) {
-      let nextDetail = '';
-      accWithCard.forEach(a => {
-        const s = a.st;
-        if (s.nextSingle > 0) nextDetail += `<div class="metric-row"><span class="credit-detail-label">Consumos 1 pago</span><span class="metric-acc-value blue">${fmt(s.nextSingle)}</span></div>`;
-        if (s.nextInstallments > 0) nextDetail += `<div class="metric-row"><span class="credit-detail-label">Cuotas</span><span class="metric-acc-value blue">${fmt(s.nextInstallments)}</span></div>`;
-      });
-      creditContent += `<div class="metric-card" id="mc-credit-next" onclick="toggleMetric('credit-next')">
-        <div class="metric-card-header">
-          <span class="metric-card-left"><i class="ti ti-credit-card blue" aria-hidden="true"></i>Próximo cierre</span>
-          <span class="metric-card-right">
-            <span class="metric-total blue">${fmt(totalNext)}</span>
-            <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
-          </span>
-        </div>
-        <div class="metric-detail hidden">${nextDetail}</div>
-      </div>`;
-    }
-    creditEl.innerHTML = creditContent;
-    creditEl.classList.toggle('hidden', !creditContent);
-  } else {
-    creditEl.classList.add('hidden');
-  }
+  document.getElementById('credit-card-detail').classList.add('hidden');
 
   document.getElementById('credit-banner').classList.add('hidden');
 
@@ -759,8 +748,9 @@ function render() {
 function toggleInstDetail() {
   const d = document.getElementById('inst-detail');
   const b = document.getElementById('inst-toggle-btn');
-  const open = d.classList.toggle('hidden');
-  b.innerHTML = !open
+  const opening = d.classList.contains('collapsed');
+  animateToggle(d, opening);
+  b.innerHTML = opening
     ? '<i class="ti ti-chevron-up icon-md" aria-hidden="true"></i> Ocultar detalle'
     : '<i class="ti ti-chevron-down icon-md" aria-hidden="true"></i> Ver detalle de cuotas';
 }
@@ -798,11 +788,6 @@ function renderInstallments() {
   if (freeM > 12) { freeM = 1; freeY++; }
   const freeKey = mkey(freeY, freeM - 1);
 
-  const fmtK = v => {
-    if (v >= 1000000) return '$' + Math.round(v / 1000000) + 'M';
-    if (v >= 1000) return '$' + Math.round(v / 1000) + 'k';
-    return '$' + v;
-  };
   let pills = sortedKeys.map(k => {
     const d = monthMap[k];
     const [y, m] = k.split('-').map(Number);
