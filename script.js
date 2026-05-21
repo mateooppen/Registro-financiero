@@ -675,22 +675,21 @@ function render() {
   const activeAccounts = getActiveAccounts();
   const accStats = activeAccounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
-  function metricCard(id, icon, label, colorClass, total, accBreakdown, variant) {
+  function metricCard(id, icon, label, colorClass, total, accBreakdown, annotation) {
     const sign = total < 0 ? '-' : '';
     const valClass = colorClass || (total >= 0 ? 'pos' : 'neg');
-    const variantCls = variant ? ` ${variant}` : '';
     const hasDetail = accBreakdown.trim().length > 0;
     const chevronHtml = hasDetail ? '<i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>' : '';
     const clickAttr = hasDetail ? ` onclick="toggleMetric('${id}')"` : '';
     const wrapHtml = hasDetail
-      ? `<div class="metric-card-accounts-wrap collapsed"><div class="metric-card-accounts${variantCls}">${accBreakdown}</div></div>`
+      ? `<div class="metric-card-accounts-wrap collapsed"><div class="metric-card-accounts">${accBreakdown}</div></div>`
       : '';
     return `<div class="metric-card" id="mc-${id}"${clickAttr}>
       <div class="metric-card-top">
         <div class="metric-card-label"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
         ${chevronHtml}
       </div>
-      <div class="metric-card-total ${valClass}">${sign}${fmt(total)}</div>
+      <div class="metric-card-total ${valClass}">${sign}${fmt(total)}${annotation ? ` <span class="metric-card-note">${annotation}</span>` : ''}</div>
       ${wrapHtml}
     </div>`;
   }
@@ -709,33 +708,24 @@ function render() {
 
   let metricsHtml = '';
   metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accCols('green', s => s.income));
-  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', cashExp, accCols('red', s => s.cashExp));
+  const totalExp = cashExp + cardImpact;
+  const expAnnotation = cardImpact > 0 ? `<span class="metric-credit-tag blue" tabindex="0">(${fmtK(cardImpact)})</span>` : '';
+  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', totalExp, accCols('red', s => s.cashExp + s.cardImpact), expAnnotation);
 
-  // Crédito: dentro de la grilla si hay actividad
-  const accWithCard = accStats.filter(a => a.st.cardImpact > 0 || a.st.cardNextImpact > 0);
-  let totalCur = 0, totalNext = 0, totalCurSingle = 0, totalCurInst = 0, totalNextSingle = 0, totalNextInst = 0;
+  // Crédito: solo próximo cierre
+  const accWithCard = accStats.filter(a => a.st.cardNextImpact > 0);
+  let totalNextSingle = 0, totalNextInst = 0;
   accWithCard.forEach(a => {
-    totalCurSingle += a.st.curSingle; totalCurInst += a.st.curInstallments;
-    totalNextSingle += a.st.nextSingle; totalNextInst += a.st.nextInstallments;
+    totalNextSingle += a.st.nextSingle;
+    totalNextInst += a.st.nextInstallments;
   });
-  totalCur = totalCurSingle + totalCurInst;
-  totalNext = totalNextSingle + totalNextInst;
-  const totalCredit = totalCur + totalNext;
-  if (totalCredit > 0) {
-    function creditCol(label, total, single, inst) {
-      if (total === 0) return '';
-      let sub = '';
-      if (single > 0) sub += `<div class="credit-sub-item"><span class="credit-sub-label"><i class="ti ti-receipt" aria-hidden="true"></i>Consumido</span><span class="credit-sub-val">${fmtK(single)}</span></div>`;
-      if (inst > 0) sub += `<div class="credit-sub-item"><span class="credit-sub-label"><i class="ti ti-calendar-repeat" aria-hidden="true"></i>Cuotas</span><span class="credit-sub-val">${fmtK(inst)}</span></div>`;
-      return `<div class="metric-acc-col">
-        <span class="metric-acc-name">${label}</span>
-        <span class="metric-acc-value blue">${fmt(total)}</span>
-        ${sub ? `<div class="credit-sub-list">${sub}</div>` : ''}
-      </div>`;
-    }
-    const creditCols = creditCol('Este cierre', totalCur, totalCurSingle, totalCurInst) +
-      creditCol('Próximo cierre', totalNext, totalNextSingle, totalNextInst);
-    metricsHtml += metricCard('credit', 'credit-card', 'Crédito', 'blue', totalCur, creditCols, 'is-credit');
+  const totalNext = totalNextSingle + totalNextInst;
+  if (totalNext > 0) {
+    let creditRows = '';
+    if (totalNextSingle > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-receipt" aria-hidden="true"></i>Consumos</span><span class="metric-acc-value blue">${fmt(totalNextSingle)}</span></div>`;
+    if (totalNextInst > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-calendar-repeat" aria-hidden="true"></i>Cuotas</span><span class="metric-acc-value blue">${fmt(totalNextInst)}</span></div>`;
+    const showDetail = totalNextSingle > 0 && totalNextInst > 0;
+    metricsHtml += metricCard('credit', 'credit-card', 'Tarjeta (próx. mes)', 'blue', totalNext, showDetail ? creditRows : '');
   }
 
   // Balance

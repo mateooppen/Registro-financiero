@@ -136,20 +136,16 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .metric-chevron{font-size:14px;color:var(--text3);transition:transform .2s}
 .metric-card-label i{font-size:13px}
 .metric-card-total{font-size:22px;font-weight:500}
+.metric-credit-tag{position:relative;font-size:12px;font-weight:400;cursor:pointer}
+.metric-credit-tag::after{content:'Crédito debitado este mes';position:absolute;bottom:calc(100% + 6px);right:0;background:var(--text);color:var(--bg);font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;z-index:50}
+.metric-credit-tag:hover::after,.metric-credit-tag:focus::after{opacity:1}
 .metric-card-accounts-wrap{display:grid;grid-template-rows:1fr;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);transition:grid-template-rows .25s ease,opacity .2s ease,margin-top .25s ease,padding-top .25s ease,border-color .25s ease;opacity:1}
 .metric-card-accounts-wrap.collapsed{grid-template-rows:0fr;opacity:0;margin-top:0;padding-top:0;border-top-color:transparent}
 .metric-card-accounts{overflow:hidden;min-height:0;display:flex;flex-direction:column;gap:6px}
-.metric-card-accounts.is-credit{flex-direction:row;gap:8px}
 .metric-acc-row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
-.metric-acc-col{flex:1;min-width:0}
-.metric-acc-name{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.metric-acc-row .metric-acc-name{flex:1;margin-bottom:0}
+.metric-acc-name{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.metric-acc-name i{font-size:13px;opacity:.7}
 .metric-acc-value{font-size:13px;font-weight:500;white-space:nowrap;flex-shrink:0}
-.credit-sub-list{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border)}
-.credit-sub-item{display:flex;flex-direction:column;padding:3px 0}
-.credit-sub-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:3px;margin-bottom:1px}
-.credit-sub-label i{font-size:11px;opacity:.7}
-.credit-sub-val{font-size:13px;font-weight:500;color:var(--text)}
 .acc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .account-config-item{padding:8px 0;border-bottom:0.5px solid var(--border)}
 .account-config-item:last-child{border-bottom:none}
