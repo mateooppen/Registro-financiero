@@ -190,13 +190,14 @@ function migrateData() {
     if (!a.color) a.color = ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
   });
   let changed = false;
+  const fallbackAcc = (appData.config.accounts.find(a => !PROTECTED_ACCOUNTS.includes(a.id)) || appData.config.accounts[0]).id;
   appData.transactions.forEach(t => {
     if (t.account) return;
     changed = true;
     if (t.source === 'rent') t.account = 'fixed';
     else if (t.payMethod === 'card') t.account = 'fixed';
-    else if (t.type === 'income') t.account = 'variable';
-    else t.account = 'variable';
+    else if (t.type === 'income') t.account = fallbackAcc;
+    else t.account = fallbackAcc;
   });
   if (changed) scheduleSave();
 }
@@ -360,14 +361,15 @@ function setAccount(a) {
 }
 
 function updateAccountToggle() {
-  const show = curType === 'expense' && curPay === 'cash';
+  const active = getActiveAccounts();
+  const show = curType === 'expense' && curPay === 'cash' && active.length > 1;
   const sel = document.getElementById('account-select');
   sel.classList.toggle('hidden', !show);
   if (show) renderAccountSelect();
 }
 
 function renderAccountSelect() {
-  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
+  const accounts = getActiveAccounts();
   const sel = document.getElementById('account-select');
   sel.innerHTML = accounts.map(a =>
     `<option value="${a.id}"${a.id === curAccount ? ' selected' : ''}>${esc(a.name)}</option>`
@@ -378,6 +380,10 @@ function getAccountName(accountId) {
   const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
   const acc = accounts.find(a => a.id === accountId);
   return acc ? acc.name : '';
+}
+
+function getActiveAccounts() {
+  return (appData.config.accounts || DEFAULT_ACCOUNTS).filter(a => a.enabled !== false);
 }
 
 // ── CONFIGURACIÓN DE CUENTAS ─────────────────────────────────────
@@ -400,11 +406,15 @@ function renderAccountsSettings() {
     const colorOptions = ACCOUNT_COLORS.map(c =>
       `<span class="color-swatch${c === a.color ? ' active' : ''}" style="background:${c}" onclick="setAccountColor('${a.id}','${c}')" aria-label="Color"></span>`
     ).join('');
-    const canDelete = !PROTECTED_ACCOUNTS.includes(a.id);
-    const delBtn = canDelete ? `<button class="account-del-btn" onclick="deleteAccount('${a.id}')" aria-label="Eliminar cuenta"><i class="ti ti-trash"></i></button>` : '';
-    return `<div class="account-config-item">
+    const isPrimary = PROTECTED_ACCOUNTS.includes(a.id);
+    const isEnabled = a.enabled !== false;
+    const disabledClass = !isEnabled ? ' account-disabled' : '';
+    const toggleHtml = !isPrimary ? `<label class="acc-switch"><input type="checkbox" onchange="toggleAccountEnabled('${a.id}')" ${isEnabled ? 'checked' : ''}><span class="acc-switch-slider"></span></label>` : '';
+    const delBtn = !isPrimary ? `<button class="account-del-btn" onclick="deleteAccount('${a.id}')" aria-label="Eliminar cuenta"><i class="ti ti-trash"></i></button>` : '';
+    return `<div class="account-config-item${disabledClass}">
       <div class="account-config-row">
         <input type="text" class="account-name-inp" value="${esc(a.name)}" onchange="renameAccount('${a.id}', this.value)" placeholder="Nombre">
+        ${toggleHtml}
         ${delBtn}
       </div>
       <div class="color-picker">${colorOptions}</div>
@@ -445,17 +455,35 @@ function addAccount() {
   render();
 }
 
-const PROTECTED_ACCOUNTS = ['fixed', 'variable'];
+const PROTECTED_ACCOUNTS = ['fixed'];
 
 function deleteAccount(id) {
   if (PROTECTED_ACCOUNTS.includes(id)) { toast('Esta cuenta no se puede eliminar'); return; }
   const accounts = appData.config.accounts;
   const acc = accounts.find(a => a.id === id);
   if (!acc) return;
-  if (!confirm('¿Eliminar la cuenta "' + acc.name + '"? Las transacciones asociadas se moverán a la primera cuenta.')) return;
-  const fallbackId = accounts.find(a => a.id !== id).id;
-  appData.transactions.forEach(t => { if (t.account === id) t.account = fallbackId; });
+  const txCount = appData.transactions.filter(t => t.account === id).length;
+  const msg = txCount > 0
+    ? '¿Eliminar "' + acc.name + '"?\n\nSe eliminarán permanentemente ' + txCount + ' movimiento(s). Esta acción no se puede deshacer.'
+    : '¿Eliminar "' + acc.name + '"?';
+  if (!confirm(msg)) return;
+  appData.transactions = appData.transactions.filter(t => t.account !== id);
   appData.config.accounts = accounts.filter(a => a.id !== id);
+  if (curAccount === id) curAccount = getActiveAccounts()[0].id;
+  scheduleSave();
+  renderAccountsSettings();
+  renderAccountSelect();
+  render();
+}
+
+function toggleAccountEnabled(id) {
+  if (PROTECTED_ACCOUNTS.includes(id)) return;
+  const acc = appData.config.accounts.find(a => a.id === id);
+  if (!acc) return;
+  acc.enabled = acc.enabled === false ? true : false;
+  if (acc.enabled === false && curAccount === id) {
+    curAccount = getActiveAccounts()[0].id;
+  }
   scheduleSave();
   renderAccountsSettings();
   renderAccountSelect();
@@ -518,8 +546,8 @@ function resetForm() {
   document.getElementById('installments-inp').value = '1';
   setType('expense');
   setPayment('cash');
-  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
-  curAccount = accounts[0].id;
+  const active = getActiveAccounts();
+  curAccount = active[0].id;
   document.getElementById('account-select').value = curAccount;
 }
 
@@ -529,7 +557,18 @@ function addTx() {
   const date = document.getElementById('date-inp').value;
   if (!desc || isNaN(amount) || amount <= 0 || !date) { toast('Completá descripción, monto y fecha'); return; }
   const payMethod = curType === 'expense' ? curPay : 'income';
-  const txAccount = curType === 'income' ? 'variable' : curPay === 'card' ? 'fixed' : curAccount;
+  const active = getActiveAccounts();
+  let txAccount;
+  if (active.length === 1) {
+    txAccount = active[0].id;
+  } else if (curType === 'income') {
+    const nonPrimary = active.find(a => !PROTECTED_ACCOUNTS.includes(a.id));
+    txAccount = nonPrimary ? nonPrimary.id : active[0].id;
+  } else if (curPay === 'card') {
+    txAccount = 'fixed';
+  } else {
+    txAccount = active.some(a => a.id === curAccount) ? curAccount : active[0].id;
+  }
   const tx = { id: Date.now(), type: curType, payMethod, desc, amount, date, account: txAccount };
   if (curType === 'expense' && curPay === 'card') {
     const installments = parseInt(document.getElementById('installments-inp').value) || 1;
@@ -554,7 +593,8 @@ function deleteTx(id) {
 
 function getStats(y, m) {
   const key = mkey(y, m), txs = appData.transactions;
-  const mtx = txs.filter(t => t.date && t.date.startsWith(key));
+  const activeIds = new Set(getActiveAccounts().map(a => a.id));
+  const mtx = txs.filter(t => t.date && t.date.startsWith(key) && activeIds.has(t.account));
   const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
   const cardAcc = mtx.filter(t => t.type === 'expense' && t.payMethod === 'card').reduce((s, t) => s + t.amount, 0);
@@ -562,7 +602,7 @@ function getStats(y, m) {
   let cardImpactNew = 0;
   let cardImpactPrev = 0;
   txs.forEach(t => {
-    if (t.payMethod !== 'card') return;
+    if (t.payMethod !== 'card' || !activeIds.has(t.account)) return;
     const txMonth = t.date ? t.date.slice(0, 7) : '';
     if (t.impactKeys) {
       const idx = t.impactKeys.indexOf(key);
@@ -632,26 +672,31 @@ function render() {
   renderAccountSelect();
   const { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance, monthTx } = getStats(curY, curM);
 
-  const accounts = appData.config.accounts || DEFAULT_ACCOUNTS;
-  const accStats = accounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
+  const activeAccounts = getActiveAccounts();
+  const accStats = activeAccounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
   function metricCard(id, icon, label, colorClass, total, accBreakdown, variant) {
     const sign = total < 0 ? '-' : '';
     const valClass = colorClass || (total >= 0 ? 'pos' : 'neg');
     const variantCls = variant ? ` ${variant}` : '';
-    return `<div class="metric-card" id="mc-${id}" onclick="toggleMetric('${id}')">
+    const hasDetail = accBreakdown.trim().length > 0;
+    const chevronHtml = hasDetail ? '<i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>' : '';
+    const clickAttr = hasDetail ? ` onclick="toggleMetric('${id}')"` : '';
+    const wrapHtml = hasDetail
+      ? `<div class="metric-card-accounts-wrap collapsed"><div class="metric-card-accounts${variantCls}">${accBreakdown}</div></div>`
+      : '';
+    return `<div class="metric-card" id="mc-${id}"${clickAttr}>
       <div class="metric-card-top">
         <div class="metric-card-label"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
-        <i class="ti ti-chevron-down metric-chevron" aria-hidden="true"></i>
+        ${chevronHtml}
       </div>
       <div class="metric-card-total ${valClass}">${sign}${fmt(total)}</div>
-      <div class="metric-card-accounts-wrap collapsed">
-        <div class="metric-card-accounts${variantCls}">${accBreakdown}</div>
-      </div>
+      ${wrapHtml}
     </div>`;
   }
 
   function accCols(colorClass, valueFn) {
+    if (accStats.length <= 1) return '';
     return accStats.map(a => {
       const val = valueFn(a.st);
       const cls = colorClass || (val >= 0 ? 'pos' : 'neg');
