@@ -9,7 +9,7 @@ const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto
 let accessToken = null;
 let tokenExpiry = 0;
 let driveFileId = null;
-let appData = { transactions: [], config: { closeDay: 25, cardName: 'Tarjeta' } };
+let appData = { transactions: [], config: { closeDay: 25, cardName: 'Mastercard', dueDay: 5 } };
 let curY, curM;
 let curType = 'expense', curPay = 'cash', curAccount = 'fixed';
 let chartInst = null;
@@ -136,7 +136,7 @@ function signOut() {
   if (!confirm('¿Cerrar sesión?')) return;
   clearAuth();
   driveFileId = null;
-  appData = { transactions: [], config: { closeDay: 25, cardName: 'Tarjeta' } };
+  appData = { transactions: [], config: { closeDay: 25, cardName: 'Mastercard', dueDay: 5 } };
   history.replaceState(null, '', location.pathname);
   showAuth();
 }
@@ -267,8 +267,9 @@ function showApp() {
   const now = new Date();
   curY = now.getFullYear(); curM = now.getMonth();
   document.getElementById('date-inp').value = now.toISOString().split('T')[0];
-  document.getElementById('card-name-inp').value = appData.config.cardName;
+  document.getElementById('card-name-inp').value = appData.config.cardName || 'Mastercard';
   document.getElementById('close-day-inp').value = appData.config.closeDay;
+  document.getElementById('due-day-inp').value = appData.config.dueDay || 5;
   // Poblar select de años para alquiler
   const ySel = document.getElementById('rent-start-month-y');
   ySel.innerHTML = '<option value="">Año</option>';
@@ -290,7 +291,9 @@ function showApp() {
   }
 
   checkAndGenerateRent();
+  checkAndGenerateCardDebit();
   updateRentBanner();
+  updateCardBanner();
   render();
 }
 
@@ -529,12 +532,16 @@ function toggleSettings() {
 }
 
 function saveSettings() {
-  const name = document.getElementById('card-name-inp').value.trim() || 'Tarjeta';
+  const name = document.getElementById('card-name-inp').value.trim() || 'Mastercard';
   const day = Math.min(31, Math.max(1, parseInt(document.getElementById('close-day-inp').value) || 25));
+  const dueDay = Math.min(31, Math.max(1, parseInt(document.getElementById('due-day-inp').value) || 5));
   appData.config.cardName = name;
   appData.config.closeDay = day;
+  appData.config.dueDay = dueDay;
   toggleSettings();
   scheduleSave();
+  checkAndGenerateCardDebit();
+  updateCardBanner();
   toast('Configuración guardada');
   render();
 }
@@ -598,24 +605,29 @@ function getStats(y, m) {
   const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
   const cardAcc = mtx.filter(t => t.type === 'expense' && t.payMethod === 'card').reduce((s, t) => s + t.amount, 0);
+
+  // Si ya existe un card-debit para este mes, el cardImpact es 0 (ya se contabilizó en cashExp)
+  const hasCardDebit = mtx.some(t => t.source === 'card-debit');
   let cardImpact = 0;
   let cardImpactNew = 0;
   let cardImpactPrev = 0;
-  txs.forEach(t => {
-    if (t.payMethod !== 'card' || !activeIds.has(t.account)) return;
-    const txMonth = t.date ? t.date.slice(0, 7) : '';
-    if (t.impactKeys) {
-      const idx = t.impactKeys.indexOf(key);
-      if (idx !== -1) {
-        const amt = t.installmentAmount || Math.round(t.amount / (t.installments || 1));
-        cardImpact += amt;
-        if (txMonth === key) cardImpactNew += amt; else cardImpactPrev += amt;
+  if (!hasCardDebit) {
+    txs.forEach(t => {
+      if (t.payMethod !== 'card' || !activeIds.has(t.account)) return;
+      const txMonth = t.date ? t.date.slice(0, 7) : '';
+      if (t.impactKeys) {
+        const idx = t.impactKeys.indexOf(key);
+        if (idx !== -1) {
+          const amt = t.installmentAmount || Math.round(t.amount / (t.installments || 1));
+          cardImpact += amt;
+          if (txMonth === key) cardImpactNew += amt; else cardImpactPrev += amt;
+        }
+      } else if (t.impactKey === key) {
+        cardImpact += t.amount;
+        if (txMonth === key) cardImpactNew += t.amount; else cardImpactPrev += t.amount;
       }
-    } else if (t.impactKey === key) {
-      cardImpact += t.amount;
-      if (txMonth === key) cardImpactNew += t.amount; else cardImpactPrev += t.amount;
-    }
-  });
+    });
+  }
   return { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance: income - cashExp - cardImpact, monthTx: mtx };
 }
 
@@ -626,30 +638,43 @@ function getAccountStats(y, m, accountId) {
   const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
 
-  // Crédito: este cierre y próximo cierre, separando consumos 1 pago vs cuotas
+  // Si ya se debitó este mes, cardImpact = 0 (ya está en cashExp via card-debit)
+  const hasCardDebit = mtx.some(t => t.source === 'card-debit');
+
   let nm = m + 1, ny = y;
   if (nm > 11) { nm = 0; ny++; }
   const nextKey = mkey(ny, nm);
 
-  let curSingle = 0, curInstallments = 0;   // este cierre
-  let nextSingle = 0, nextInstallments = 0; // próximo cierre
+  let curSingle = 0, curInstallments = 0;
+  let nextSingle = 0, nextInstallments = 0;
 
+  if (!hasCardDebit) {
+    atx.forEach(t => {
+      if (t.payMethod !== 'card') return;
+      const isMulti = (t.installments || 1) > 1;
+      const amt = isMulti ? (t.installmentAmount || Math.round(t.amount / t.installments)) : t.amount;
+      if (t.impactKeys) {
+        if (t.impactKeys.indexOf(key) !== -1) {
+          if (isMulti) curInstallments += amt; else curSingle += amt;
+        }
+      } else {
+        const ik = t.impactKey || '';
+        if (ik === key) { if (isMulti) curInstallments += amt; else curSingle += amt; }
+      }
+    });
+  }
+
+  // Próximo cierre siempre se calcula (no depende del debit del mes actual)
   atx.forEach(t => {
     if (t.payMethod !== 'card') return;
     const isMulti = (t.installments || 1) > 1;
     const amt = isMulti ? (t.installmentAmount || Math.round(t.amount / t.installments)) : t.amount;
-
-    // Checar impacto en este cierre (key)
     if (t.impactKeys) {
-      if (t.impactKeys.indexOf(key) !== -1) {
-        if (isMulti) curInstallments += amt; else curSingle += amt;
-      }
       if (t.impactKeys.indexOf(nextKey) !== -1) {
         if (isMulti) nextInstallments += amt; else nextSingle += amt;
       }
     } else {
       const ik = t.impactKey || '';
-      if (ik === key) { if (isMulti) curInstallments += amt; else curSingle += amt; }
       if (ik === nextKey) { if (isMulti) nextInstallments += amt; else nextSingle += amt; }
     }
   });
@@ -708,8 +733,10 @@ function render() {
 
   let metricsHtml = '';
   metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accCols('green', s => s.income));
+  const cardDebitTx = monthTx.find(t => t.source === 'card-debit');
+  const creditInExpenses = cardDebitTx ? cardDebitTx.amount : cardImpact;
   const totalExp = cashExp + cardImpact;
-  const expAnnotation = cardImpact > 0 ? `<span class="metric-credit-tag blue" tabindex="0">(${fmtK(cardImpact)})</span>` : '';
+  const expAnnotation = creditInExpenses > 0 ? `<span class="metric-credit-tag blue" tabindex="0">(${fmtK(creditInExpenses)})</span>` : '';
   metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', totalExp, accCols('red', s => s.cashExp + s.cardImpact), expAnnotation);
 
   // Crédito: solo próximo cierre
@@ -753,14 +780,15 @@ function render() {
         } else {
           sub = `${cfg.cardName} · impacta ${keys[0] || ''}`;
         }
+      } else if (t.source === 'card-debit') {
+        sub = 'Débito automático';
       } else {
         sub = t.type === 'income' ? 'Ingreso' : 'Contado';
       }
       const accName = getAccountName(t.account);
       if (accName) sub += ' · ' + accName;
-      const amountDisplay = t.payMethod === 'card' && (t.installments || 1) > 1
-        ? `${fmt(t.amount)}`
-        : `${fmt(t.amount)}`;
+      const isAutoTx = t.source === 'rent' || t.source === 'card-debit';
+      const delBtn = isAutoTx ? '' : `<button class="tx-del" onclick="deleteTx(${t.id})" aria-label="Eliminar movimiento"><i class="ti ti-x" aria-hidden="true"></i></button>`;
       return `<div class="tx-item">
         <span class="tx-dot ${dc}" aria-hidden="true"></span>
         <div class="tx-main">
@@ -768,8 +796,8 @@ function render() {
           <div class="tx-sub">${fmtDate(t.date)} · ${sub}</div>
         </div>
         <div class="tx-right">
-          <span class="tx-amount ${dc}">${prefix}${amountDisplay}</span>
-          <button class="tx-del" onclick="deleteTx(${t.id})" aria-label="Eliminar movimiento"><i class="ti ti-x" aria-hidden="true"></i></button>
+          <span class="tx-amount ${dc}">${prefix}${fmt(t.amount)}</span>
+          ${delBtn}
         </div>
       </div>`;
     }).join('');
@@ -963,6 +991,133 @@ async function checkAndGenerateRent() {
         await scheduleSave();
         render();
     }
+}
+
+// ── DÉBITO AUTOMÁTICO DE TARJETA ─────────────────────────────────
+
+async function checkAndGenerateCardDebit() {
+  const dueDay = appData.config.dueDay;
+  const closeDay = appData.config.closeDay;
+  const cardName = appData.config.cardName || 'Mastercard';
+  if (!dueDay || !closeDay) return;
+
+  const today = new Date();
+  const todayKey = today.toISOString().split('T')[0];
+  const activeIds = new Set(getActiveAccounts().map(a => a.id));
+  let updated = false;
+
+  // Revisar los últimos 3 meses para generación retroactiva
+  for (let offset = -2; offset <= 0; offset++) {
+    let checkY = today.getFullYear(), checkM = today.getMonth() + offset;
+    while (checkM < 0) { checkM += 12; checkY--; }
+    while (checkM > 11) { checkM -= 12; checkY++; }
+
+    const monthKey = mkey(checkY, checkM);
+    const maxDay = new Date(checkY, checkM + 1, 0).getDate();
+    const actualDueDay = Math.min(dueDay, maxDay);
+    const dueDate = `${monthKey}-${String(actualDueDay).padStart(2, '0')}`;
+
+    // Solo generar si la fecha de vencimiento ya pasó
+    if (dueDate > todayKey) continue;
+
+    // Verificar si ya existe un card-debit para este mes
+    const exists = appData.transactions.find(t => t.source === 'card-debit' && t.date && t.date.startsWith(monthKey));
+    if (exists) continue;
+
+    // Calcular cardImpact para este mes (lo que se debita)
+    const key = monthKey;
+    let debitAmount = 0;
+    appData.transactions.forEach(t => {
+      if (t.payMethod !== 'card' || !activeIds.has(t.account)) return;
+      if (t.impactKeys) {
+        if (t.impactKeys.indexOf(key) !== -1) {
+          debitAmount += t.installmentAmount || Math.round(t.amount / (t.installments || 1));
+        }
+      } else if (t.impactKey === key) {
+        debitAmount += t.amount;
+      }
+    });
+
+    if (debitAmount <= 0) continue;
+
+    const newTx = {
+      id: Date.now() + Math.random(),
+      type: 'expense',
+      payMethod: 'cash',
+      desc: 'Pago tarjeta ' + cardName,
+      amount: debitAmount,
+      date: dueDate,
+      source: 'card-debit',
+      account: 'fixed',
+      debitCycle: monthKey
+    };
+    appData.transactions.push(newTx);
+    updated = true;
+  }
+
+  if (updated) {
+    appData.transactions.sort((a, b) => b.date.localeCompare(a.date));
+    await scheduleSave();
+    render();
+  }
+}
+
+function getCardImpactForMonth(y, m) {
+  const key = mkey(y, m);
+  const activeIds = new Set(getActiveAccounts().map(a => a.id));
+  let total = 0;
+  appData.transactions.forEach(t => {
+    if (t.payMethod !== 'card' || !activeIds.has(t.account)) return;
+    if (t.impactKeys) {
+      if (t.impactKeys.indexOf(key) !== -1) {
+        total += t.installmentAmount || Math.round(t.amount / (t.installments || 1));
+      }
+    } else if (t.impactKey === key) {
+      total += t.amount;
+    }
+  });
+  return total;
+}
+
+function updateCardBanner() {
+  const banner = document.getElementById('card-banner');
+  const dueDay = appData.config.dueDay;
+  if (!dueDay) return banner.classList.add('hidden');
+
+  const today = new Date();
+  const y = today.getFullYear(), m = today.getMonth();
+  const maxDay = new Date(y, m + 1, 0).getDate();
+  const actualDueDay = Math.min(dueDay, maxDay);
+  const dueDate = new Date(y, m, actualDueDay);
+  const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+  if (diffDays >= 0 && diffDays <= 5) {
+    const monthKey = mkey(y, m);
+    // Verificar si ya se debitó este mes
+    const alreadyDebited = appData.transactions.find(t => t.source === 'card-debit' && t.date && t.date.startsWith(monthKey));
+    if (alreadyDebited) return banner.classList.add('hidden');
+
+    // Verificar si hay dismiss para este mes
+    if (appData.config.cardBannerDismissed === monthKey) return banner.classList.add('hidden');
+
+    const amount = getCardImpactForMonth(y, m);
+    if (amount <= 0) return banner.classList.add('hidden');
+
+    const cardName = appData.config.cardName || 'Mastercard';
+    const dayLabel = diffDays === 0 ? 'hoy' : diffDays === 1 ? 'mañana' : `en ${diffDays} días`;
+    document.getElementById('card-banner-text').innerHTML =
+      `<b>Vencimiento ${dayLabel}:</b> Se debitarán ${fmt(amount)} de ${cardName}`;
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+function dismissCardBanner() {
+  const today = new Date();
+  appData.config.cardBannerDismissed = mkey(today.getFullYear(), today.getMonth());
+  scheduleSave();
+  document.getElementById('card-banner').classList.add('hidden');
 }
 
 function saveRentConfig() {

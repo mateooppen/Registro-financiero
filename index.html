@@ -29,6 +29,11 @@
     </div>
   </div>
 
+  <div id="card-banner" class="banner banner--top hidden">
+    <i class="ti ti-credit-card" aria-hidden="true"></i>
+    <span class="banner-text" id="card-banner-text"></span>
+    <button class="banner-close" onclick="dismissCardBanner()" aria-label="Cerrar"><i class="ti ti-x"></i></button>
+  </div>
   <div id="rent-banner" class="banner banner--top hidden">
     <i class="ti ti-home-up" aria-hidden="true"></i>
     <span class="banner-text" id="rent-banner-text"></span>
@@ -133,6 +138,10 @@
         <div>
           <label for="close-day-inp">Día de cierre</label>
           <input type="number" id="close-day-inp" min="1" max="31" inputmode="numeric">
+        </div>
+        <div>
+          <label for="due-day-inp">Día de vencimiento</label>
+          <input type="number" id="due-day-inp" min="1" max="31" inputmode="numeric">
         </div>
         <button class="add-btn" onclick="saveSettings()"><i class="ti ti-check icon-lg" aria-hidden="true"></i> Guardar configuración</button>
         <button class="logout-btn" onclick="signOut()"><i class="ti ti-logout icon-lg" aria-hidden="true"></i> Cerrar sesión</button>
