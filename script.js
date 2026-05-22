@@ -1,3 +1,42 @@
+// ── TEMA ─────────────────────────────────────────────────────────
+(function initTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+})();
+
+function toggleTheme() {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme');
+  let next;
+  if (!current) {
+    // Primera vez: detectar tema actual del sistema e invertir
+    next = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+  } else {
+    next = current === 'dark' ? 'light' : 'dark';
+  }
+  root.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  updateThemeIcon();
+}
+
+function updateThemeIcon() {
+  const btn = document.getElementById('theme-btn');
+  if (!btn) return;
+  const root = document.documentElement;
+  const theme = root.getAttribute('data-theme');
+  let isDark;
+  if (theme) {
+    isDark = theme === 'dark';
+  } else {
+    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  btn.innerHTML = isDark
+    ? '<i class="ti ti-sun" aria-hidden="true"></i>'
+    : '<i class="ti ti-moon" aria-hidden="true"></i>';
+}
+
+document.addEventListener('DOMContentLoaded', updateThemeIcon);
+
 const CLIENT_ID = '926576243590-0ffu3hgsn4qmsdua6bekbb0s7443j2cn.apps.googleusercontent.com';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const REDIRECT_URI = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -755,8 +794,22 @@ function render() {
     metricsHtml += metricCard('credit', 'credit-card', 'Tarjeta (próx. mes)', 'blue', totalNext, showDetail ? creditRows : '');
   }
 
-  // Balance
-  metricsHtml += metricCard('balance', 'scale', 'Balance', '', balance, accCols('', s => s.balance));
+  // Saldo acumulado: suma de balances desde el primer mes hasta el mes actual
+  let saldo = 0;
+  const activeIds = new Set(activeAccounts.map(a => a.id));
+  const allDates = appData.transactions.filter(t => t.date && activeIds.has(t.account)).map(t => t.date.slice(0, 7));
+  if (allDates.length) {
+    const firstKey = allDates.sort()[0];
+    const [fy, fm] = firstKey.split('-').map(Number);
+    let sy = fy, sm = fm - 1;
+    while (sy < curY || (sy === curY && sm <= curM)) {
+      const st = getStats(sy, sm);
+      saldo += st.balance;
+      sm++;
+      if (sm > 11) { sm = 0; sy++; }
+    }
+  }
+  metricsHtml += metricCard('saldo', 'wallet', 'Saldo', '', saldo, '');
 
   document.getElementById('metrics-grid').innerHTML = metricsHtml;
   document.getElementById('credit-card-detail').classList.add('hidden');

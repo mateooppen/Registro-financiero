@@ -11,7 +11,7 @@
   --font:'DM Sans',system-ui,sans-serif;
 }
 @media(prefers-color-scheme:dark){
-  :root{
+  :root:not([data-theme="light"]){
     --bg:#1c1c1a; --bg2:#252523; --bg3:#2e2e2b;
     --text:#f0f0ec; --text2:#a0a09c; --text3:#6a6a66;
     --border:rgba(255,255,255,0.1); --border2:rgba(255,255,255,0.2);
@@ -25,12 +25,27 @@
     --blue-bg:#0d3a6a; --blue-text:#85B7EB;
   }
 }
+:root[data-theme="dark"]{
+  --bg:#1c1c1a; --bg2:#252523; --bg3:#2e2e2b;
+  --text:#f0f0ec; --text2:#a0a09c; --text3:#6a6a66;
+  --border:rgba(255,255,255,0.1); --border2:rgba(255,255,255,0.2);
+  --green:#2ec48f; --green-bg:#0d3326; --green-text:#5DCAA5;
+  --red:#e87654; --red-bg:#3a1a10; --red-text:#F0997B;
+  --blue:#5fa8e0; --blue-bg:#0d2640; --blue-text:#85B7EB;
+  --amber-bg:#2e1f05; --amber-text:#EF9F27;
+  --toggle:#6BC0D4; --toggle-bg:#162E34; --toggle-text:#7ECDDE;
+  --green-bg:#1a5c42; --green-text:#5DCAA5;
+  --red-bg:#5a2515; --red-text:#F0997B;
+  --blue-bg:#0d3a6a; --blue-text:#85B7EB;
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg3);font-family:var(--font);color:var(--text)}
 .shell{max-width:520px;margin:0 auto;background:var(--bg3);min-height:100dvh}
 .topbar{background:var(--bg);border-bottom:0.5px solid var(--border);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
 .topbar-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:500}
 .topbar-title i{font-size:18px;color:var(--text2)}
+.theme-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;padding:4px;display:flex;align-items:center;justify-content:center;border-radius:8px;transition:color .2s}
+.theme-btn:active{color:var(--text)}
 .month-nav{display:flex;align-items:center;gap:4px}
 .nav-btn{background:none;border:0.5px solid var(--border2);border-radius:8px;width:32px;height:32px;cursor:pointer;color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:16px}
 .nav-btn:active{background:var(--bg2)}
@@ -129,11 +144,11 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .inst-badge{font-size:11px;color:var(--blue-text);background:var(--blue-bg);padding:1px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0}
 .inst-badge.last{color:var(--green-text);background:var(--green-bg)}
 .inst-amt{font-size:12px;font-weight:500;color:var(--text);flex-shrink:0;min-width:60px;text-align:right}
-.metric-card{background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:14px 16px;display:flex;flex-direction:column;cursor:pointer;min-width:0;overflow:hidden}
+.metric-card{position:relative;background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:14px 16px;display:flex;flex-direction:column;cursor:pointer;min-width:0;overflow:hidden}
 .metric-card:last-child:nth-child(odd){grid-column:1/-1}
 .metric-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .metric-card-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:5px}
-.metric-chevron{font-size:14px;color:var(--text3);transition:transform .2s}
+.metric-chevron{position:absolute;top:14px;right:16px;font-size:14px;color:var(--text3);transition:transform .2s}
 .metric-card-label i{font-size:13px}
 .metric-card-total{font-size:22px;font-weight:500}
 .metric-credit-tag{position:relative;font-size:12px;font-weight:400;cursor:pointer}
@@ -200,3 +215,12 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .hist-income{color:var(--green)}
 .hist-expense{color:var(--red)}
 .hist-balance{font-weight:500}
+@media(max-width:375px){
+  .metric-card{padding:12px 12px}
+  .metric-card-total{font-size:18px}
+  .metric-card-label{font-size:10px}
+  .metric-credit-tag{font-size:10px}
+  .metric-acc-value{font-size:12px}
+  .metric-acc-name{font-size:10px}
+  .metric-chevron{top:12px;right:12px}
+}
