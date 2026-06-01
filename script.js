@@ -644,6 +644,8 @@ function getStats(y, m) {
   const income = mtx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const cashExp = mtx.filter(t => t.type === 'expense' && t.payMethod === 'cash').reduce((s, t) => s + t.amount, 0);
   const cardAcc = mtx.filter(t => t.type === 'expense' && t.payMethod === 'card').reduce((s, t) => s + t.amount, 0);
+  // Pago de tarjeta ya debitado este mes (plata real, parte de cashExp)
+  const cardPaid = mtx.filter(t => t.source === 'card-debit').reduce((s, t) => s + t.amount, 0);
 
   // Si ya existe un card-debit para este mes, el cardImpact es 0 (ya se contabilizó en cashExp)
   const hasCardDebit = mtx.some(t => t.source === 'card-debit');
@@ -667,7 +669,7 @@ function getStats(y, m) {
       }
     });
   }
-  return { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance: income - cashExp - cardImpact, monthTx: mtx };
+  return { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, cardPaid, balance: income - cashExp, monthTx: mtx };
 }
 
 function getAccountStats(y, m, accountId) {
@@ -721,10 +723,12 @@ function getAccountStats(y, m, accountId) {
   const cardImpact = curSingle + curInstallments;
   const cardNextImpact = nextSingle + nextInstallments;
 
+  const cardPaid = mtx.filter(t => t.source === 'card-debit').reduce((s, t) => s + t.amount, 0);
+
   return {
-    income, cashExp, cardImpact, cardNextImpact,
+    income, cashExp, cardPaid, cardImpact, cardNextImpact,
     curSingle, curInstallments, nextSingle, nextInstallments,
-    balance: income - cashExp - cardImpact
+    balance: income - cashExp
   };
 }
 
@@ -734,7 +738,7 @@ function render() {
   const cfg = appData.config;
   document.getElementById('month-lbl').textContent = MONTHS[curM] + ' ' + curY;
   renderAccountSelect();
-  const { income, cashExp, cardAcc, cardImpact, cardImpactNew, cardImpactPrev, balance, monthTx } = getStats(curY, curM);
+  const { income, cashExp, cardPaid, balance, monthTx } = getStats(curY, curM);
 
   const activeAccounts = getActiveAccounts();
   const accStats = activeAccounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
@@ -772,26 +776,39 @@ function render() {
 
   let metricsHtml = '';
   metricsHtml += metricCard('income', 'arrow-down-circle', 'Ingresos', 'green', income, accCols('green', s => s.income));
-  const cardDebitTx = monthTx.find(t => t.source === 'card-debit');
-  const creditInExpenses = cardDebitTx ? cardDebitTx.amount : cardImpact;
-  const totalExp = cashExp + cardImpact;
-  const expAnnotation = creditInExpenses > 0 ? `<span class="metric-credit-tag blue" tabindex="0">(${fmtK(creditInExpenses)})</span>` : '';
-  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', totalExp, accCols('red', s => s.cashExp + s.cardImpact), expAnnotation);
+  // Gastos = plata real (contado + pagos de tarjeta debitados). Desglose: contado vs tarjeta y por cuenta.
+  const contadoTotal = cashExp - cardPaid;
+  let expBreakdown = '';
+  if (cardPaid > 0) {
+    expBreakdown += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-cash" aria-hidden="true"></i>Contado</span><span class="metric-acc-value red">${fmt(contadoTotal)}</span></div>`;
+    expBreakdown += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-credit-card" aria-hidden="true"></i>Tarjeta (pago)</span><span class="metric-acc-value red">${fmt(cardPaid)}</span></div>`;
+  }
+  expBreakdown += accCols('red', s => s.cashExp);
+  metricsHtml += metricCard('expense', 'cash', 'Gastos', 'red', cashExp, expBreakdown);
 
-  // Crédito: solo próximo cierre
-  const accWithCard = accStats.filter(a => a.st.cardNextImpact > 0);
-  let totalNextSingle = 0, totalNextInst = 0;
-  accWithCard.forEach(a => {
-    totalNextSingle += a.st.nextSingle;
-    totalNextInst += a.st.nextInstallments;
+  // Tarjeta: ciclo vigente (lo que se acumula hacia el próximo cierre, relativo a hoy)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const cycleKey = computeImpactKey(todayStr, cfg.closeDay);
+  const activeIdsSet = new Set(activeAccounts.map(a => a.id));
+  let cycleSingle = 0, cycleInst = 0;
+  appData.transactions.forEach(t => {
+    if (t.payMethod !== 'card' || !activeIdsSet.has(t.account)) return;
+    const isMulti = (t.installments || 1) > 1;
+    const amt = isMulti ? (t.installmentAmount || Math.round(t.amount / t.installments)) : t.amount;
+    const keys = t.impactKeys || (t.impactKey ? [t.impactKey] : []);
+    if (keys.indexOf(cycleKey) !== -1) {
+      if (isMulti) cycleInst += amt; else cycleSingle += amt;
+    }
   });
-  const totalNext = totalNextSingle + totalNextInst;
-  if (totalNext > 0) {
+  const cycleTotal = cycleSingle + cycleInst;
+  if (cycleTotal > 0) {
     let creditRows = '';
-    if (totalNextSingle > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-receipt" aria-hidden="true"></i>Consumos</span><span class="metric-acc-value blue">${fmt(totalNextSingle)}</span></div>`;
-    if (totalNextInst > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-calendar-repeat" aria-hidden="true"></i>Cuotas</span><span class="metric-acc-value blue">${fmt(totalNextInst)}</span></div>`;
-    const showDetail = totalNextSingle > 0 && totalNextInst > 0;
-    metricsHtml += metricCard('credit', 'credit-card', 'Tarjeta (próx. mes)', 'blue', totalNext, showDetail ? creditRows : '');
+    if (cycleSingle > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-receipt" aria-hidden="true"></i>Consumos</span><span class="metric-acc-value blue">${fmt(cycleSingle)}</span></div>`;
+    if (cycleInst > 0) creditRows += `<div class="metric-acc-row"><span class="metric-acc-name"><i class="ti ti-calendar-repeat" aria-hidden="true"></i>Cuotas</span><span class="metric-acc-value blue">${fmt(cycleInst)}</span></div>`;
+    const showDetail = cycleSingle > 0 && cycleInst > 0;
+    const cd = nextCloseDateObj();
+    const closeLbl = String(cd.getDate()).padStart(2, '0') + '/' + String(cd.getMonth() + 1).padStart(2, '0');
+    metricsHtml += metricCard('credit', 'credit-card', 'Tarjeta', 'blue', cycleTotal, showDetail ? creditRows : '', `cierra ${closeLbl}`);
   }
 
   // Saldo acumulado: suma de balances desde el primer mes hasta el mes actual
@@ -963,12 +980,12 @@ function renderHist(cfg) {
   const cur = mkey(curY, curM);
   document.getElementById('hist-row').innerHTML = months.map(({ y, m }) => {
     const k = mkey(y, m);
-    const { income, cashExp, cardImpact, balance } = getStats(y, m);
+    const { income, cashExp, balance } = getStats(y, m);
     return `<div class="hist-card${k === cur ? ' active' : ''}" onclick="goMonth(${y},${m})">
       <div class="hist-month">${MONTHS[m].slice(0, 3)} ${y}</div>
       <div class="hist-nums">
         <span class="hist-income">+${fmt(income)}</span>
-        <span class="hist-expense">-${fmt(cashExp + cardImpact)}</span>
+        <span class="hist-expense">-${fmt(cashExp)}</span>
         <span class="hist-balance ${balance >= 0 ? 'pos' : 'neg'}">${balance < 0 ? '-' : ''}${fmt(balance)}</span>
       </div>
     </div>`;
@@ -1132,45 +1149,61 @@ function getCardImpactForMonth(y, m) {
   return total;
 }
 
-function updateCardBanner() {
-  const banner = document.getElementById('card-banner');
-  const dueDay = appData.config.dueDay;
-  if (!dueDay) return banner.classList.add('hidden');
-
-  const today = new Date();
-  const y = today.getFullYear(), m = today.getMonth();
-  const maxDay = new Date(y, m + 1, 0).getDate();
-  const actualDueDay = Math.min(dueDay, maxDay);
-  const dueDate = new Date(y, m, actualDueDay);
-  const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-
-  if (diffDays >= 0 && diffDays <= 5) {
-    const monthKey = mkey(y, m);
-    // Verificar si ya se debitó este mes
-    const alreadyDebited = appData.transactions.find(t => t.source === 'card-debit' && t.date && t.date.startsWith(monthKey));
-    if (alreadyDebited) return banner.classList.add('hidden');
-
-    // Verificar si hay dismiss para este mes
-    if (appData.config.cardBannerDismissed === monthKey) return banner.classList.add('hidden');
-
-    const amount = getCardImpactForMonth(y, m);
-    if (amount <= 0) return banner.classList.add('hidden');
-
-    const cardName = appData.config.cardName || 'Mastercard';
-    const dayLabel = diffDays === 0 ? 'hoy' : diffDays === 1 ? 'mañana' : `en ${diffDays} días`;
-    document.getElementById('card-banner-text').innerHTML =
-      `<b>Vencimiento ${dayLabel}:</b> Se debitarán ${fmt(amount)} de ${cardName}`;
-    banner.classList.remove('hidden');
-  } else {
-    banner.classList.add('hidden');
+// Fecha del próximo cierre (ciclo vigente) relativa a hoy
+function nextCloseDateObj() {
+  const closeDay = appData.config.closeDay;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let y = today.getFullYear(), m = today.getMonth();
+  const clampDay = (yy, mm) => Math.min(closeDay, new Date(yy, mm + 1, 0).getDate());
+  let day = clampDay(y, m);
+  if (today.getDate() > day) {
+    m++; if (m > 11) { m = 0; y++; }
+    day = clampDay(y, m);
   }
+  return new Date(y, m, day);
 }
 
-function dismissCardBanner() {
-  const today = new Date();
-  appData.config.cardBannerDismissed = mkey(today.getFullYear(), today.getMonth());
-  scheduleSave();
-  document.getElementById('card-banner').classList.add('hidden');
+// Ciclo cerrado pendiente de pago: el cierre ya pasó pero el vencimiento todavía no.
+// Devuelve su mes de pago (impactKey) y la fecha de vencimiento, o null si no hay.
+function closedPendingCycle() {
+  const closeDay = appData.config.closeDay, dueDay = appData.config.dueDay;
+  if (!closeDay || !dueDay) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const clampDay = (yy, mm, d) => Math.min(d, new Date(yy, mm + 1, 0).getDate());
+  let cy = today.getFullYear(), cm = today.getMonth();
+  const closeThis = new Date(cy, cm, clampDay(cy, cm, closeDay));
+  // El cierre del mes en curso solo cuenta como "ya cerrado" a partir del día siguiente,
+  // para que el día exacto del cierre el monto siga en "Próximo cierre" y no se duplique en el banner.
+  if (closeThis >= today) { cm -= 1; if (cm < 0) { cm = 11; cy -= 1; } }
+  // El pago cae el mes siguiente al cierre
+  let py = cy, pm = cm + 1; if (pm > 11) { pm = 0; py += 1; }
+  const dueDate = new Date(py, pm, clampDay(py, pm, dueDay));
+  if (today > dueDate) return null;
+  return { payKey: mkey(py, pm), dueDate };
+}
+
+function updateCardBanner() {
+  const banner = document.getElementById('card-banner');
+  const { closeDay, dueDay } = appData.config;
+  if (!closeDay || !dueDay) return banner.classList.add('hidden');
+
+  const cyc = closedPendingCycle();
+  if (!cyc) return banner.classList.add('hidden');
+
+  // Si este ciclo ya se debitó, no mostrar
+  const alreadyDebited = appData.transactions.find(t => t.source === 'card-debit' && t.date && t.date.startsWith(cyc.payKey));
+  if (alreadyDebited) return banner.classList.add('hidden');
+
+  const [py, pm] = cyc.payKey.split('-').map(Number);
+  const amount = getCardImpactForMonth(py, pm - 1);
+  if (amount <= 0) return banner.classList.add('hidden');
+
+  const dd = String(cyc.dueDate.getDate()).padStart(2, '0');
+  const mm = String(cyc.dueDate.getMonth() + 1).padStart(2, '0');
+  const cardName = appData.config.cardName || 'Mastercard';
+  document.getElementById('card-banner-text').innerHTML =
+    `<b>A pagar (vence ${dd}/${mm}):</b> Se debitarán ${fmt(amount)} de ${cardName}`;
+  banner.classList.remove('hidden');
 }
 
 function saveRentConfig() {
