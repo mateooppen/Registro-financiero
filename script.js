@@ -743,7 +743,7 @@ function render() {
   const activeAccounts = getActiveAccounts();
   const accStats = activeAccounts.map(acc => ({ ...acc, st: getAccountStats(curY, curM, acc.id) }));
 
-  function metricCard(id, icon, label, colorClass, total, accBreakdown, annotation) {
+  function metricCard(id, icon, label, colorClass, total, accBreakdown, annotation, subValue, leadLabel) {
     const sign = total < 0 ? '-' : '';
     const valClass = colorClass || (total >= 0 ? 'pos' : 'neg');
     const hasDetail = accBreakdown.trim().length > 0;
@@ -752,12 +752,15 @@ function render() {
     const wrapHtml = hasDetail
       ? `<div class="metric-card-accounts-wrap collapsed"><div class="metric-card-accounts">${accBreakdown}</div></div>`
       : '';
+    const subHtml = subValue ? `<div class="metric-card-sub">${subValue}</div>` : '';
+    const leadHtml = leadLabel ? `<span class="metric-card-sub-label">${leadLabel}</span> ` : '';
     return `<div class="metric-card" id="mc-${id}"${clickAttr}>
       <div class="metric-card-top">
         <div class="metric-card-label"><i class="ti ti-${icon} ${colorClass}" aria-hidden="true"></i>${label}</div>
         ${chevronHtml}
       </div>
-      <div class="metric-card-total ${valClass}">${sign}${fmt(total)}${annotation ? ` <span class="metric-card-note">${annotation}</span>` : ''}</div>
+      <div class="metric-card-total ${valClass}">${leadHtml}${sign}${fmt(total)}${annotation ? ` <span class="metric-card-note">${annotation}</span>` : ''}</div>
+      ${subHtml}
       ${wrapHtml}
     </div>`;
   }
@@ -811,8 +814,8 @@ function render() {
     metricsHtml += metricCard('credit', 'credit-card', 'Tarjeta', 'blue', cycleTotal, showDetail ? creditRows : '', `cierra ${closeLbl}`);
   }
 
-  // Saldo acumulado: suma de balances desde el primer mes hasta el mes actual
-  let saldo = 0;
+  // Saldo: principal = saldo del mes; secundario = saldo total acumulado hasta el mes actual
+  let saldoTotal = 0;
   const activeIds = new Set(activeAccounts.map(a => a.id));
   const allDates = appData.transactions.filter(t => t.date && activeIds.has(t.account)).map(t => t.date.slice(0, 7));
   if (allDates.length) {
@@ -821,12 +824,13 @@ function render() {
     let sy = fy, sm = fm - 1;
     while (sy < curY || (sy === curY && sm <= curM)) {
       const st = getStats(sy, sm);
-      saldo += st.balance;
+      saldoTotal += st.balance;
       sm++;
       if (sm > 11) { sm = 0; sy++; }
     }
   }
-  metricsHtml += metricCard('saldo', 'wallet', 'Saldo', '', saldo, '');
+  const saldoTotalSub = `<span class="metric-card-sub-label">Histórico</span> <span class="${saldoTotal >= 0 ? 'pos' : 'neg'}">${saldoTotal < 0 ? '-' : ''}${fmt(saldoTotal)}</span>`;
+  metricsHtml += metricCard('saldo', 'wallet', 'Saldo', '', balance, '', '', saldoTotalSub, 'del mes');
 
   document.getElementById('metrics-grid').innerHTML = metricsHtml;
   document.getElementById('credit-card-detail').classList.add('hidden');

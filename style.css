@@ -152,6 +152,8 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
 .metric-card-label i{font-size:13px}
 .metric-card-total{font-size:22px;font-weight:500}
 .metric-card-note{font-size:11px;font-weight:400;color:var(--text3);letter-spacing:.02em;white-space:nowrap}
+.metric-card-sub{font-size:13px;font-weight:500;margin-top:2px;display:flex;align-items:baseline;gap:5px}
+.metric-card-sub-label{font-size:11px;font-weight:400;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
 .metric-credit-tag{position:relative;font-size:12px;font-weight:400;cursor:pointer}
 .metric-credit-tag::after{content:'Crédito debitado este mes';position:absolute;bottom:calc(100% + 6px);right:0;background:var(--text);color:var(--bg);font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;z-index:50}
 .metric-credit-tag:hover::after,.metric-credit-tag:focus::after{opacity:1}
@@ -221,6 +223,8 @@ input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(55,138,221,0.15)}
   .metric-card-total{font-size:18px}
   .metric-card-label{font-size:10px}
   .metric-card-note{font-size:10px}
+  .metric-card-sub{font-size:12px}
+  .metric-card-sub-label{font-size:10px}
   .metric-credit-tag{font-size:10px}
   .metric-acc-value{font-size:12px}
   .metric-acc-name{font-size:10px}
