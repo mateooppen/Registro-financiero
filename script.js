@@ -188,16 +188,36 @@ async function driveReq(url, opts = {}) {
     showAuth('Tu sesión expiró. Volvé a ingresar.');
     throw new Error('token_expired');
   }
-  const res = await fetch(url, {
-    ...opts,
-    headers: { 'Authorization': 'Bearer ' + accessToken, ...(opts.headers || {}) }
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      ...opts,
+      headers: { 'Authorization': 'Bearer ' + accessToken, ...(opts.headers || {}) }
+    });
+  } catch (netErr) {
+    const err = new Error('Sin conexión con Drive');
+    err.transient = true;
+    throw err;
+  }
   if (res.status === 401) {
     clearAuth();
     showAuth('Tu sesión expiró. Volvé a ingresar.');
     throw new Error('unauthorized');
   }
-  if (!res.ok) throw new Error('Drive error ' + res.status);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      const e = body.error || {};
+      const reason = e.errors && e.errors[0] && e.errors[0].reason;
+      detail = [reason, e.message].filter(Boolean).join(': ');
+    } catch {}
+    const err = new Error('Drive ' + res.status + (detail ? ' (' + detail + ')' : ''));
+    err.status = res.status;
+    // 429 y 5xx son temporales; el resto (400, 403, 404...) no se arregla reintentando
+    err.transient = res.status === 429 || res.status >= 500;
+    throw err;
+  }
   return res;
 }
 
@@ -264,9 +284,24 @@ async function saveToDrive() {
     );
     showSaveBar('Guardado', true);
   } catch(e) {
-    if (e.message !== 'token_expired' && e.message !== 'unauthorized') {
-      showSaveBar('Error al guardar. Reintentando...');
+    if (e.message === 'token_expired' || e.message === 'unauthorized') return;
+    console.error('Error al guardar en Drive:', e);
+    if (e.status === 404) {
+      // El archivo ya no existe en Drive: crear uno nuevo con los datos actuales
+      try {
+        await createFile();
+        showSaveBar('Guardado', true);
+        return;
+      } catch(e2) {
+        console.error('Error al recrear el archivo en Drive:', e2);
+        e = e2;
+      }
+    }
+    if (e.transient) {
+      showSaveBar('Error al guardar (' + e.message + '). Reintentando...');
       saveTimer = setTimeout(saveToDrive, 4000);
+    } else {
+      showSaveBar('No se pudo guardar: ' + e.message);
     }
   }
 }
@@ -1211,12 +1246,30 @@ function updateCardBanner() {
 }
 
 function saveRentConfig() {
+  const baseAmount = parseFloat(document.getElementById('rent-base-amount').value);
+  const day = parseInt(document.getElementById('rent-day').value);
+  const y = document.getElementById('rent-start-month-y').value;
+  const m = document.getElementById('rent-start-month-m').value;
+  const increaseFreq = parseInt(document.getElementById('rent-freq').value);
+  const percent = parseFloat(document.getElementById('rent-percent').value);
+
+  const errors = [];
+  if (!(baseAmount > 0)) errors.push('el monto base');
+  if (!(day >= 1 && day <= 31)) errors.push('el día de cobro (1 a 31)');
+  if (!y || !m) errors.push('el mes y año de inicio');
+  if (!(increaseFreq >= 1)) errors.push('la frecuencia de aumento (1 mes o más)');
+  if (!(percent >= 0)) errors.push('el porcentaje de aumento');
+  if (errors.length) {
+    alert('Revisá ' + errors.join(', ') + '.');
+    return;
+  }
+
   appData.config.rent = {
-      baseAmount: parseFloat(document.getElementById('rent-base-amount').value),
-      day: parseInt(document.getElementById('rent-day').value),
-      startMonth: document.getElementById('rent-start-month-y').value + '-' + document.getElementById('rent-start-month-m').value,
-      increaseFreq: parseInt(document.getElementById('rent-freq').value),
-      percent: parseFloat(document.getElementById('rent-percent').value),
+      baseAmount,
+      day,
+      startMonth: y + '-' + m,
+      increaseFreq,
+      percent,
       lastDismissed: (appData.config.rent && appData.config.rent.lastDismissed) || null
   };
   scheduleSave();
@@ -1228,7 +1281,7 @@ function saveRentConfig() {
 function updateRentBanner() {
     const conf = appData.config.rent;
     const banner = document.getElementById('rent-banner');
-    if (!conf || !conf.baseAmount) return banner.classList.add('hidden');
+    if (!conf || !conf.baseAmount || !(conf.increaseFreq >= 1)) return banner.classList.add('hidden');
 
     const today = new Date();
     const start = new Date(conf.startMonth + "-01T00:00:00");
@@ -1257,6 +1310,7 @@ function updateRentBanner() {
 
 function dismissRentBanner() {
     const conf = appData.config.rent;
+    if (!conf || !(conf.increaseFreq >= 1)) return;
     const today = new Date();
     let nextIncreaseDate = new Date(conf.startMonth + "-01T00:00:00");
     while (nextIncreaseDate <= today) {
